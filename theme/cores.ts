@@ -71,7 +71,9 @@ export const Cores = {
 
   // Acento (usado com parcimônia: alertas, erros, ênfase)
   acento: rosa[300],
-  acentoTexto: rosa[400],
+  acentoTexto: rosa[400],     // magenta como texto sobre branco (5,5:1)
+  acentoSuave: rosa[100],     // fundo de selos e avisos
+  acentoForte: rosa[500],     // texto sobre o acentoSuave (6,7:1)
 
   // Superfícies
   fundo: cinza[100],             // fundo das telas

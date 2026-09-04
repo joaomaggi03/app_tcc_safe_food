@@ -1,146 +1,142 @@
 /**
  * app/index.tsx
  * ---------------------------------------------------------------
- * Tela INÍCIO — rota "/".
+ * Tela INÍCIO — rota "/". O painel do estabelecimento.
  *
- * ATENÇÃO: nesta fase ela é um PAINEL DE DIAGNÓSTICO, temporário.
- * A função dele é provar, no aparelho, que a Fase 1 funcionou:
- * o banco foi criado, a norma foi carregada e o filtro por perfil
- * está montado. Na Fase 2 esta tela vira o painel de verdade
- * (perfil do estabelecimento, trilhas, último score).
+ * Mostra quem é o estabelecimento cadastrado e o resumo do checklist
+ * que o perfil dele gera. Daqui sai o botão "Editar", que reabre o
+ * cadastro — é por ele que você troca o tipo e vê o checklist mudar.
  *
- * Como os dados são lidos: `useEffect` roda uma vez, logo depois da
- * primeira renderização, chama as funções de db/consultas.ts e guarda
- * o resultado com `useState`. Guardar num estado é o que faz a tela
- * se redesenhar quando os números chegam.
+ * Se ainda não houver cadastro, redireciona para /cadastro: é o
+ * "primeiro acesso" que o RF02 pede.
+ *
+ * O status das trilhas de periodicidade e o último score entram aqui
+ * nas Fases 5 e 4.
  */
 
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Cores from '../theme/cores';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarCatalogo,
-  contarItensPorFrequencia,
-  contarItensPorPerfil,
-  obterEstabelecimento,
-  type ContagemCatalogo,
+  listarPerfis,
+  resumoDoPerfil,
   type Estabelecimento,
-  type ItensPorFrequencia,
-  type ItensPorPerfil,
 } from '../db/consultas';
-
-interface Diagnostico {
-  catalogo: ContagemCatalogo;
-  porPerfil: ItensPorPerfil[];
-  porFrequencia: ItensPorFrequencia[];
-  estabelecimento: Estabelecimento | null;
-}
-
-const NOMES_TRILHA: Record<string, string> = {
-  diario: 'Diária',
-  periodico: 'Periódica (auditoria)',
-  semestral: 'Semestral (legal)',
-};
+import { useEstabelecimento } from '../store/estabelecimento';
+import Cores from '../theme/cores';
 
 export default function TelaInicio() {
-  const [dados, setDados] = useState<Diagnostico | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const estabelecimento = useEstabelecimento((estado) => estado.atual);
+  const carregado = useEstabelecimento((estado) => estado.carregado);
 
-  useEffect(() => {
-    try {
-      // A primeira chamada aqui é o que abre o banco, cria as tabelas
-      // e roda o seed (ver db/index.ts).
-      setDados({
-        catalogo: contarCatalogo(),
-        porPerfil: contarItensPorPerfil(),
-        porFrequencia: contarItensPorFrequencia(),
-        estabelecimento: obterEstabelecimento(),
-      });
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  if (erro) {
+  if (!carregado) {
     return (
       <View style={estilos.centro}>
-        <Text style={estilos.tituloErro}>Erro ao abrir o banco</Text>
-        <Text style={estilos.textoErro}>{erro}</Text>
+        <Text style={estilos.aviso}>Carregando…</Text>
       </View>
     );
   }
 
-  if (!dados) {
-    return (
-      <View style={estilos.centro}>
-        <Text style={estilos.subtitulo}>Carregando o banco…</Text>
-      </View>
-    );
+  if (!estabelecimento) {
+    return <Redirect href="/cadastro" />;
   }
 
-  const { catalogo, porPerfil, porFrequencia, estabelecimento } = dados;
+  return <Painel estabelecimento={estabelecimento} />;
+}
+
+function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+
+  // Recalculado quando o perfil muda — trocar o tipo atualiza os números.
+  const resumo = useMemo(
+    () => resumoDoPerfil(estabelecimento.perfil_id),
+    [estabelecimento.perfil_id],
+  );
+  const catalogo = useMemo(() => contarCatalogo(), []);
+  const nomePerfil = useMemo(
+    () => listarPerfis().find((p) => p.id === estabelecimento.perfil_id)?.nome ?? '—',
+    [estabelecimento.perfil_id],
+  );
 
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
-      <Text style={estilos.etiqueta}>Fase 1 — diagnóstico</Text>
-      <Text style={estilos.titulo}>Banco de dados local</Text>
-      <Text style={estilos.subtitulo}>
-        A RDC 216 foi carregada no SQLite do aparelho. Estes números vêm de consultas
-        reais ao banco — se eles aparecem, o seed funcionou.
+      {/* --- Identificação --- */}
+      <View style={estilos.cartaoPrincipal}>
+        <View style={estilos.linhaTopo}>
+          <View style={estilos.flex}>
+            <Text style={estilos.tipo}>{nomePerfil}</Text>
+            <Text style={estilos.nome}>{estabelecimento.nome}</Text>
+          </View>
+
+          <Pressable
+            onPress={() => router.push('/cadastro')}
+            style={({ pressed }) => [estilos.botaoEditar, pressed && estilos.pressionado]}
+            accessibilityRole="button"
+            accessibilityLabel="Editar estabelecimento"
+          >
+            <Ionicons name="create-outline" size={18} color={Cores.sobrePrimaria} />
+            <Text style={estilos.botaoEditarTexto}>Editar</Text>
+          </Pressable>
+        </View>
+
+        {estabelecimento.cidade || estabelecimento.responsavel ? (
+          <View style={estilos.detalhes}>
+            {estabelecimento.cidade ? (
+              <Detalhe icone="location-outline" texto={estabelecimento.cidade} />
+            ) : null}
+            {estabelecimento.responsavel ? (
+              <Detalhe icone="person-outline" texto={estabelecimento.responsavel} />
+            ) : null}
+          </View>
+        ) : null}
+
+        <Text style={estilos.dataCadastro}>
+          Cadastrado em {formatarData(estabelecimento.data_cadastro)}
+        </Text>
+      </View>
+
+      {/* --- Resumo do checklist --- */}
+      <Cartao
+        titulo="Seu checklist"
+        nota={`${resumo.total} exigências da RDC 216 se aplicam a este perfil, em ${resumo.categorias} categorias.`}
+      >
+        <Linha rotulo="Itens do dia a dia" valor={resumo.diario} />
+        <Linha rotulo="Itens da auditoria periódica" valor={resumo.periodico} />
+        <Linha rotulo="Itens de prazo legal (água)" valor={resumo.semestral} />
+      </Cartao>
+
+      {/* --- O que ainda não existe --- */}
+      <Cartao titulo="Próximas etapas" nota="O que este painel ainda vai mostrar.">
+        <Text style={estilos.pendente}>• Responder os itens da inspeção (Fase 3)</Text>
+        <Text style={estilos.pendente}>• Score de conformidade (Fase 4)</Text>
+        <Text style={estilos.pendente}>
+          • Status das trilhas diária, periódica e semestral (Fase 5)
+        </Text>
+      </Cartao>
+
+      <Text style={estilos.rodape}>
+        Base offline: {catalogo.itens} itens da RDC 216 em {catalogo.categorias} categorias.
       </Text>
-
-      <Cartao titulo="Catálogo da norma">
-        <Linha rotulo="Perfis de negócio" valor={catalogo.perfis} />
-        <Linha rotulo="Categorias (seções 4.1–4.12)" valor={catalogo.categorias} />
-        <Linha rotulo="Itens de verificação" valor={catalogo.itens} />
-        <Linha rotulo="Ligações item ↔ perfil" valor={catalogo.aplicabilidades} />
-      </Cartao>
-
-      <Cartao
-        titulo="Itens por perfil"
-        nota="É o filtro inteligente (RF03): cada perfil enxerga um subconjunto diferente da norma."
-      >
-        {porPerfil.map((p) => (
-          <Linha key={p.perfil_id} rotulo={p.nome} valor={p.total} />
-        ))}
-      </Cartao>
-
-      <Cartao
-        titulo="Itens por trilha"
-        nota="Base da Fase 5. Só a trilha semestral (água) tem prazo fixado pela norma."
-      >
-        {porFrequencia.map((f) => (
-          <Linha
-            key={f.frequencia}
-            rotulo={NOMES_TRILHA[f.frequencia] ?? f.frequencia}
-            valor={f.total}
-          />
-        ))}
-      </Cartao>
-
-      <Cartao
-        titulo="Estabelecimento"
-        nota="A tabela existe e está vazia — o cadastro é a Fase 2 (RF02)."
-      >
-        {estabelecimento ? (
-          <>
-            <Linha rotulo="Nome" valor={estabelecimento.nome} />
-            <Linha rotulo="Perfil" valor={estabelecimento.perfil_id} />
-            <Linha rotulo="Cadastrado em" valor={estabelecimento.data_cadastro} />
-            <Linha
-              rotulo="Auditoria a cada"
-              valor={`${estabelecimento.periodicidade_auditoria_dias} dias`}
-            />
-          </>
-        ) : (
-          <Text style={estilos.vazio}>Nenhum estabelecimento cadastrado ainda.</Text>
-        )}
-      </Cartao>
     </ScrollView>
   );
 }
 
-// --- Pequenos componentes locais, só para não repetir estilo ---
+/** Converte 'AAAA-MM-DD' em 'DD/MM/AAAA' para leitura. */
+function formatarData(iso: string): string {
+  const [ano, mes, dia] = iso.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+function Detalhe({ icone, texto }: { icone: 'location-outline' | 'person-outline'; texto: string }) {
+  return (
+    <View style={estilos.detalhe}>
+      <Ionicons name={icone} size={14} color={Cores.textoSuave} />
+      <Text style={estilos.detalheTexto}>{texto}</Text>
+    </View>
+  );
+}
 
 function Cartao({
   titulo,
@@ -178,34 +174,48 @@ const estilos = StyleSheet.create({
     backgroundColor: Cores.fundo,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
   },
-  // O verde primário como preenchimento, com texto verde-escuro por cima.
-  etiqueta: {
-    alignSelf: 'flex-start',
-    backgroundColor: Cores.primaria,
-    color: Cores.sobrePrimaria,
+  aviso: { fontSize: 14, color: Cores.textoSuave },
+  flex: { flex: 1 },
+
+  cartaoPrincipal: {
+    backgroundColor: Cores.superficie,
+    borderRadius: 14,
+    padding: 18,
+    borderLeftWidth: 4,
+    borderLeftColor: Cores.primaria,
+  },
+  linhaTopo: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  tipo: {
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    color: Cores.primariaTexto,
     textTransform: 'uppercase',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
+    letterSpacing: 0.5,
   },
-  titulo: { fontSize: 24, fontWeight: '700', color: Cores.texto, marginTop: 10 },
-  subtitulo: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario, marginTop: 8 },
+  nome: { fontSize: 22, fontWeight: '700', color: Cores.texto, marginTop: 4 },
+  botaoEditar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Cores.primaria,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  botaoEditarTexto: { fontSize: 13, fontWeight: '700', color: Cores.sobrePrimaria },
+  pressionado: { opacity: 0.8 },
+
+  detalhes: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 12 },
+  detalhe: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  detalheTexto: { fontSize: 13, color: Cores.textoSecundario },
+  dataCadastro: { fontSize: 12, color: Cores.textoSuave, marginTop: 12 },
+
   cartao: {
     backgroundColor: Cores.superficie,
     borderRadius: 14,
     padding: 18,
-    marginTop: 18,
-    shadowColor: Cores.texto,
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    marginTop: 16,
   },
   tituloCartao: { fontSize: 16, fontWeight: '700', color: Cores.texto },
   notaCartao: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 4 },
@@ -217,11 +227,8 @@ const estilos = StyleSheet.create({
     paddingVertical: 5,
   },
   rotulo: { fontSize: 14, color: Cores.textoSecundario, flex: 1, paddingRight: 12 },
-  // Verde 400: o mesmo verde da marca, um passo mais escuro, para
-  // poder ser lido como texto sobre branco.
   valor: { fontSize: 15, fontWeight: '700', color: Cores.primariaTexto },
-  vazio: { fontSize: 14, color: Cores.textoSuave, fontStyle: 'italic' },
-  // A paleta não tem vermelho: o acento magenta faz o papel de alerta.
-  tituloErro: { fontSize: 18, fontWeight: '700', color: Cores.acentoTexto, marginBottom: 8 },
-  textoErro: { fontSize: 13, color: Cores.textoSecundario, textAlign: 'center' },
+  pendente: { fontSize: 13, lineHeight: 22, color: Cores.textoSuave },
+
+  rodape: { fontSize: 11, color: Cores.textoSuave, textAlign: 'center', marginTop: 20 },
 });

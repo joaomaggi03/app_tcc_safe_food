@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 1;
+export const VERSAO_SCHEMA = 2;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -109,6 +109,23 @@ const SCHEMA_V1 = `
 `;
 
 /**
+ * Versão 2: campos opcionais do estabelecimento.
+ *
+ * Repare que NÃO editamos o SCHEMA_V1 acima. Quem já tem o app instalado
+ * está com `user_version = 1`: aquele bloco não roda de novo, e a coluna
+ * nova nunca apareceria no aparelho dele. Toda alteração de schema entra
+ * como um bloco NOVO — é o que faz o app se atualizar sem perder dados.
+ *
+ * `responsavel` conversa com a seção 4.12 da RDC (responsável pela
+ * manipulação); `cidade` serve ao relatório. Ambos são opcionais: sem
+ * NOT NULL, o SQLite aceita NULL nas linhas que já existem.
+ */
+const SCHEMA_V2 = `
+  ALTER TABLE estabelecimento ADD COLUMN cidade      TEXT;
+  ALTER TABLE estabelecimento ADD COLUMN responsavel TEXT;
+`;
+
+/**
  * Cria/atualiza as tabelas conforme a versão do schema no aparelho.
  *
  * Roda em toda abertura do app, mas cada bloco só executa uma vez:
@@ -124,9 +141,13 @@ export function migrar(db: SQLiteDatabase): void {
     db.execSync(SCHEMA_V1);
   }
 
+  if (versaoAtual < 2) {
+    db.execSync(SCHEMA_V2);
+  }
+
   // Fases futuras entram aqui:
-  //   if (versaoAtual < 2) { db.execSync(SCHEMA_V2); }   // inspeção + resposta (Fase 3)
-  //   if (versaoAtual < 3) { db.execSync(SCHEMA_V3); }   // status_trilha (Fase 5)
+  //   if (versaoAtual < 3) { db.execSync(SCHEMA_V3); }   // inspeção + resposta (Fase 3)
+  //   if (versaoAtual < 4) { db.execSync(SCHEMA_V4); }   // status_trilha (Fase 5)
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.
   // É seguro aqui porque VERSAO_SCHEMA é uma constante nossa, não entrada do usuário.

@@ -18,9 +18,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 
 export default function LayoutRaiz() {
+  // Carrega o estabelecimento do banco UMA vez, quando o app abre.
+  // Fica aqui, no layout raiz, porque este componente envolve todas as
+  // telas — assim qualquer uma já encontra o store preenchido.
+  const carregar = useEstabelecimento((estado) => estado.carregar);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
   return (
     <>
       <StatusBar style="dark" />
@@ -72,6 +83,16 @@ export default function LayoutRaiz() {
               <Ionicons name="time-outline" color={color} size={size} />
             ),
           }}
+        />
+
+        {/*
+          A tela de cadastro é uma rota normal (app/cadastro.tsx), mas
+          `href: null` a esconde da barra de abas: ela não é um destino
+          fixo, e sim algo que se abre no primeiro acesso ou ao editar.
+        */}
+        <Tabs.Screen
+          name="cadastro"
+          options={{ href: null, title: 'Estabelecimento' }}
         />
       </Tabs>
     </>

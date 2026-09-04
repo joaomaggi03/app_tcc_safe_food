@@ -75,8 +75,18 @@ exportação em PDF (RF08).
 - **Fase 1 — concluída.** Schema SQLite em `db/schema.ts` (tabelas `perfil`,
   `categoria`, `item`, `item_aplicabilidade`, `estabelecimento`, `meta`), seed em
   `db/seed.ts` a partir de `data/rdc216.ts`, consultas em `db/consultas.ts`.
-  A tela Início é um painel de diagnóstico temporário — a Fase 2 a substitui.
-- **Próxima: Fase 2** — cadastro do estabelecimento (nome + perfil, RF02) e
-  checklist filtrado por perfil (RF03).
+- **Fase 2 — concluída.** Cadastro do estabelecimento em `app/cadastro.tsx`
+  (RF02: nome e tipo obrigatórios; cidade e responsável opcionais) e checklist
+  filtrado por perfil em `app/nova-inspecao.tsx` (RF03, ainda só leitura).
+  Estado global em `store/estabelecimento.ts` (Zustand). O schema v2 acrescentou
+  as colunas `cidade` e `responsavel`.
+- **Próxima: Fase 3** — execução da inspeção: quatro respostas por item (RF06) e
+  "Não se Aplica" ocultando o item nas próximas inspeções (RF09).
+- **O fluxo de telas é provisório.** O autor não está convencido da navegação
+  atual e pode redesenhá-la. Mantenha a regra de negócio em `db/` e `store/`,
+  fora das telas. A tela de execução da Fase 3 deve receber a trilha por
+  parâmetro, senão a Fase 5 obriga a reescrever a navegação dela.
+- Paleta da marca em `theme/cores.ts` (primária #3CAE63). Nenhuma tela escreve
+  hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
   Ao editar `data/rdc216.ts`, suba a `VERSAO_SEED` em `db/seed.ts`.
