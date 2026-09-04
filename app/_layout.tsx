@@ -18,10 +18,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-
-// Cor de destaque do app (verde de "conformidade").
-const COR_ATIVA = '#2E7D32';
-const COR_INATIVA = '#8A8A8E';
+import Cores from '../theme/cores';
 
 export default function LayoutRaiz() {
   return (
@@ -30,10 +27,21 @@ export default function LayoutRaiz() {
 
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: COR_ATIVA,
-          tabBarInactiveTintColor: COR_INATIVA,
-          headerStyle: { backgroundColor: '#FFFFFF' },
-          headerTitleStyle: { color: '#1C1C1E' },
+          tabBarActiveTintColor: Cores.abaAtiva,
+          tabBarInactiveTintColor: Cores.abaInativa,
+          tabBarStyle: {
+            backgroundColor: Cores.superficie,
+            borderTopColor: Cores.borda,
+          },
+          headerStyle: {
+            backgroundColor: Cores.superficie,
+            // Faixa fina na cor da marca embaixo do cabeçalho.
+            borderBottomWidth: 3,
+            borderBottomColor: Cores.primaria,
+          },
+          headerTitleStyle: { color: Cores.texto },
+          headerShadowVisible: false,
+          headerTitleAlign: 'left',
         }}
       >
         <Tabs.Screen

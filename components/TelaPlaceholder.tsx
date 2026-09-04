@@ -13,6 +13,7 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
+import Cores from '../theme/cores';
 
 interface Props {
   titulo: string;
@@ -50,54 +51,63 @@ export default function TelaPlaceholder({ titulo, subtitulo, proximosPassos, fas
 const estilos = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Cores.fundo,
     padding: 20,
     justifyContent: 'center',
   },
   cartao: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Cores.superficie,
     borderRadius: 16,
     padding: 24,
     // Sombra: iOS usa shadow*, Android usa elevation.
-    shadowColor: '#000000',
-    shadowOpacity: 0.06,
+    shadowColor: Cores.texto,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
+  // Etiqueta em "pílula": aqui o verde primário aparece como
+  // preenchimento, com texto verde-escuro por cima (contraste 6,5:1).
+  // `overflow: hidden` é o que faz o borderRadius valer no Android.
   etiqueta: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2E7D32',
+    alignSelf: 'flex-start',
+    backgroundColor: Cores.primaria,
+    color: Cores.sobrePrimaria,
+    fontSize: 11,
+    fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginBottom: 12,
   },
   titulo: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: Cores.texto,
   },
   subtitulo: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#5A5A5F',
+    color: Cores.textoSecundario,
     marginTop: 8,
   },
   divisor: {
     height: 1,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: Cores.divisor,
     marginVertical: 18,
   },
   rotuloLista: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8A8A8E',
+    color: Cores.textoSuave,
     marginBottom: 8,
   },
   itemLista: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#3A3A3C',
+    color: Cores.textoSecundario,
   },
 });

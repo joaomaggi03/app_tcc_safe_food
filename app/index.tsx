@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Cores from '../theme/cores';
 import {
   contarCatalogo,
   contarItensPorFrequencia,
@@ -170,47 +171,57 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: number | string }) {
 }
 
 const estilos = StyleSheet.create({
-  tela: { flex: 1, backgroundColor: '#F2F2F7' },
+  tela: { flex: 1, backgroundColor: Cores.fundo },
   conteudo: { padding: 20, paddingBottom: 40 },
   centro: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Cores.fundo,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
+  // O verde primário como preenchimento, com texto verde-escuro por cima.
   etiqueta: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2E7D32',
+    alignSelf: 'flex-start',
+    backgroundColor: Cores.primaria,
+    color: Cores.sobrePrimaria,
+    fontSize: 11,
+    fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
-  titulo: { fontSize: 24, fontWeight: '700', color: '#1C1C1E', marginTop: 4 },
-  subtitulo: { fontSize: 14, lineHeight: 21, color: '#5A5A5F', marginTop: 8 },
+  titulo: { fontSize: 24, fontWeight: '700', color: Cores.texto, marginTop: 10 },
+  subtitulo: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario, marginTop: 8 },
   cartao: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Cores.superficie,
     borderRadius: 14,
     padding: 18,
     marginTop: 18,
-    shadowColor: '#000000',
-    shadowOpacity: 0.05,
+    shadowColor: Cores.texto,
+    shadowOpacity: 0.07,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  tituloCartao: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  notaCartao: { fontSize: 12, lineHeight: 18, color: '#8A8A8E', marginTop: 4 },
-  divisor: { height: 1, backgroundColor: '#E5E5EA', marginVertical: 12 },
+  tituloCartao: { fontSize: 16, fontWeight: '700', color: Cores.texto },
+  notaCartao: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 4 },
+  divisor: { height: 1, backgroundColor: Cores.divisor, marginVertical: 12 },
   linha: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 5,
   },
-  rotulo: { fontSize: 14, color: '#3A3A3C', flex: 1, paddingRight: 12 },
-  valor: { fontSize: 15, fontWeight: '700', color: '#2E7D32' },
-  vazio: { fontSize: 14, color: '#8A8A8E', fontStyle: 'italic' },
-  tituloErro: { fontSize: 18, fontWeight: '700', color: '#B3261E', marginBottom: 8 },
-  textoErro: { fontSize: 13, color: '#5A5A5F', textAlign: 'center' },
+  rotulo: { fontSize: 14, color: Cores.textoSecundario, flex: 1, paddingRight: 12 },
+  // Verde 400: o mesmo verde da marca, um passo mais escuro, para
+  // poder ser lido como texto sobre branco.
+  valor: { fontSize: 15, fontWeight: '700', color: Cores.primariaTexto },
+  vazio: { fontSize: 14, color: Cores.textoSuave, fontStyle: 'italic' },
+  // A paleta não tem vermelho: o acento magenta faz o papel de alerta.
+  tituloErro: { fontSize: 18, fontWeight: '700', color: Cores.acentoTexto, marginBottom: 8 },
+  textoErro: { fontSize: 13, color: Cores.textoSecundario, textAlign: 'center' },
 });
