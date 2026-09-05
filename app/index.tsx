@@ -15,8 +15,8 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarCatalogo,
@@ -26,6 +26,7 @@ import {
 } from '../db/consultas';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
+import { formatarData } from '../theme/rotulos';
 
 export default function TelaInicio() {
   const estabelecimento = useEstabelecimento((estado) => estado.atual);
@@ -49,10 +50,17 @@ export default function TelaInicio() {
 function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   const router = useRouter();
 
-  // Recalculado quando o perfil muda — trocar o tipo atualiza os números.
-  const resumo = useMemo(
-    () => resumoDoPerfil(estabelecimento.perfil_id),
-    [estabelecimento.perfil_id],
+  // Relido sempre que a tela volta a aparecer, e não só quando o perfil
+  // muda: marcar um item como "não se aplica" numa inspeção (RF09)
+  // também mexe nestes números.
+  const [resumo, setResumo] = useState(() =>
+    resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      setResumo(resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id));
+    }, [estabelecimento.perfil_id, estabelecimento.id]),
   );
   const catalogo = useMemo(() => contarCatalogo(), []);
   const nomePerfil = useMemo(
@@ -109,7 +117,6 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
       {/* --- O que ainda não existe --- */}
       <Cartao titulo="Próximas etapas" nota="O que este painel ainda vai mostrar.">
-        <Text style={estilos.pendente}>• Responder os itens da inspeção (Fase 3)</Text>
         <Text style={estilos.pendente}>• Score de conformidade (Fase 4)</Text>
         <Text style={estilos.pendente}>
           • Status das trilhas diária, periódica e semestral (Fase 5)
@@ -121,12 +128,6 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
       </Text>
     </ScrollView>
   );
-}
-
-/** Converte 'AAAA-MM-DD' em 'DD/MM/AAAA' para leitura. */
-function formatarData(iso: string): string {
-  const [ano, mes, dia] = iso.split('-');
-  return `${dia}/${mes}/${ano}`;
 }
 
 function Detalhe({ icone, texto }: { icone: 'location-outline' | 'person-outline'; texto: string }) {

@@ -10,22 +10,22 @@
  *    - Catálogo = a norma virada dado: `perfil`, `categoria`, `item`,
  *      `item_aplicabilidade`. Vêm do data/rdc216.ts e são reescritas
  *      sempre que o seed muda. Você nunca edita isso pelo app.
- *    - Usuário = o que a pessoa cria: `estabelecimento` (e, nas fases
- *      seguintes, inspeções e respostas). O seed NUNCA toca nelas.
+ *    - Usuário = o que a pessoa cria: `estabelecimento`, `inspecao`,
+ *      `resposta`, `item_oculto`. O seed NUNCA toca nelas.
  *
  * 2) MIGRAÇÃO VERSIONADA
  *    O SQLite guarda um número inteiro chamado `user_version`. Usamos
  *    ele para saber qual versão do schema já está no aparelho. Quando
- *    uma fase futura precisar de tabelas novas (inspeção, resposta,
- *    status_trilha...), você adiciona um bloco novo em `migrar()` e
- *    sobe a VERSAO_SCHEMA — os apps já instalados se atualizam sozinhos,
- *    sem perder os dados do usuário.
+ *    uma fase futura precisar de tabelas novas (status_trilha...), você
+ *    adiciona um bloco novo em `migrar()` e sobe a VERSAO_SCHEMA — os
+ *    apps já instalados se atualizam sozinhos, sem perder os dados do
+ *    usuário.
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 2;
+export const VERSAO_SCHEMA = 3;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -126,6 +126,73 @@ const SCHEMA_V2 = `
 `;
 
 /**
+ * Versão 3 (Fase 3): a EXECUÇÃO da inspeção (RF06) e o "Não se Aplica"
+ * permanente (RF09). São três tabelas com papéis bem diferentes:
+ *
+ *  - `inspecao`    = o cabeçalho de um preenchimento (de quem, qual
+ *                    trilha, quando começou, quando terminou).
+ *  - `resposta`    = uma linha por item respondido dentro de uma inspeção.
+ *  - `item_oculto` = os itens que o usuário disse que não se aplicam ao
+ *                    negócio dele, e que somem das próximas inspeções.
+ *
+ * POR QUE `item_oculto` É UMA TABELA PRÓPRIA
+ * Daria para deduzir os itens ocultos procurando a última resposta de
+ * cada item. Mas uma tabela separada é melhor por dois motivos: a
+ * consulta do checklist vira um NOT IN simples, em vez de uma subconsulta
+ * com "última inspeção"; e o RF09 fica REVERSÍVEL — desocultar um item é
+ * apagar uma linha, sem reescrever o histórico de inspeções.
+ *
+ * SOBRE AS DATAS AQUI
+ * `data_cadastro` (v1) guarda só 'AAAA-MM-DD', mas em inspeção usamos o
+ * timestamp ISO completo ('2026-09-05T14:03:21.000Z'). O motivo é ordenar
+ * duas inspeções do mesmo dia. Como o timestamp COMEÇA pela data, as
+ * comparações de vencimento da Fase 5 continuam funcionando igual, e
+ * `substr(data_conclusao, 1, 10)` devolve a data pura quando precisar.
+ */
+const SCHEMA_V3 = `
+  -- Um preenchimento do checklist, do início à conclusão.
+  CREATE TABLE IF NOT EXISTS inspecao (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    estabelecimento_id  INTEGER NOT NULL REFERENCES estabelecimento(id) ON DELETE CASCADE,
+    -- Qual das três trilhas de periodicidade está sendo preenchida.
+    -- Já existe agora, na Fase 3, porque a Fase 5 se apoia nela.
+    trilha              TEXT    NOT NULL
+                          CHECK (trilha IN ('diario', 'periodico', 'semestral')),
+    data_inicio         TEXT    NOT NULL,
+    -- NULL enquanto a inspeção está em andamento.
+    data_conclusao      TEXT,
+    status              TEXT    NOT NULL DEFAULT 'em_andamento'
+                          CHECK (status IN ('em_andamento', 'concluida'))
+  );
+
+  -- As quatro respostas do RF06, uma linha por item respondido.
+  -- A chave primária composta impede o mesmo item de ser respondido duas
+  -- vezes na mesma inspeção: trocar de opção ATUALIZA a linha existente.
+  CREATE TABLE IF NOT EXISTS resposta (
+    inspecao_id    INTEGER NOT NULL REFERENCES inspecao(id) ON DELETE CASCADE,
+    item_id        TEXT    NOT NULL REFERENCES item(id),
+    resposta       TEXT    NOT NULL
+                     CHECK (resposta IN ('adequado', 'inadequado',
+                                         'nao_se_aplica', 'nao_observado')),
+    respondida_em  TEXT    NOT NULL,
+    PRIMARY KEY (inspecao_id, item_id)
+  );
+
+  -- O RF09: itens que não se aplicam a ESTE estabelecimento.
+  -- Ligado ao estabelecimento, e não ao perfil: dois restaurantes podem
+  -- tomar decisões diferentes sobre o mesmo item.
+  CREATE TABLE IF NOT EXISTS item_oculto (
+    estabelecimento_id  INTEGER NOT NULL REFERENCES estabelecimento(id) ON DELETE CASCADE,
+    item_id             TEXT    NOT NULL REFERENCES item(id),
+    ocultado_em         TEXT    NOT NULL,
+    PRIMARY KEY (estabelecimento_id, item_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_inspecao_estab ON inspecao (estabelecimento_id, status);
+  CREATE INDEX IF NOT EXISTS idx_resposta_item  ON resposta (item_id);
+`;
+
+/**
  * Cria/atualiza as tabelas conforme a versão do schema no aparelho.
  *
  * Roda em toda abertura do app, mas cada bloco só executa uma vez:
@@ -145,8 +212,11 @@ export function migrar(db: SQLiteDatabase): void {
     db.execSync(SCHEMA_V2);
   }
 
+  if (versaoAtual < 3) {
+    db.execSync(SCHEMA_V3);
+  }
+
   // Fases futuras entram aqui:
-  //   if (versaoAtual < 3) { db.execSync(SCHEMA_V3); }   // inspeção + resposta (Fase 3)
   //   if (versaoAtual < 4) { db.execSync(SCHEMA_V4); }   // status_trilha (Fase 5)
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

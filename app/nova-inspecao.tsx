@@ -1,40 +1,44 @@
 /**
  * app/nova-inspecao.tsx
  * ---------------------------------------------------------------
- * Tela do CHECKLIST DINÂMICO (RF03) — rota "/nova-inspecao".
+ * Tela NOVA INSPEÇÃO — rota "/nova-inspecao".
  *
- * Mostra as exigências da RDC 216 que se aplicam ao perfil do
- * estabelecimento cadastrado, agrupadas por categoria e na ordem da
- * norma. Trocar o tipo no Início muda esta lista.
+ * O ponto de partida: escolher QUAL trilha preencher. Cada cartão abre
+ * a tela de execução passando a trilha por parâmetro
+ * ("/inspecao?trilha=diario") — é esse parâmetro que faz uma única tela
+ * de execução servir às três trilhas, hoje e na Fase 5.
  *
- * Nesta fase o checklist é SÓ LEITURA. Os botões de resposta
- * (Adequado / Inadequado / Não se Aplica / Não Observado) são a Fase 3.
+ * Na Fase 2 esta tela mostrava o checklist inteiro, só para leitura.
+ * Agora o checklist tem dono: ele é preenchido na tela de execução.
  *
- * Sobre o SectionList: é o componente do React Native para listas com
- * cabeçalhos de seção. Ele recebe `sections` no formato
- * `[{ title, data: [...] }]` e só desenha o que cabe na tela — com 89
- * itens isso já faz diferença na rolagem.
+ * No rodapé fica a lista de itens marcados como "não se aplica" (RF09),
+ * com a opção de voltar a exibi-los. Sem ela o RF09 seria uma porta só
+ * de ida: um toque errado esconderia uma exigência para sempre.
  */
 
-import { Redirect } from 'expo-router';
-import { useMemo } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
-import { checklistDoPerfil, type ItemChecklist } from '../db/consultas';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  contarItensPorTrilha,
+  listarInspecoes,
+  listarItensOcultos,
+  reexibirItem,
+  TRILHAS,
+  type Estabelecimento,
+  type ItemOculto,
+  type ResumoInspecao,
+  type Trilha,
+} from '../db/consultas';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-
-/** Rótulo curto de cada trilha de periodicidade (detalhada na Fase 5). */
-const ROTULO_TRILHA: Record<ItemChecklist['frequencia'], string> = {
-  diario: 'diário',
-  periodico: 'periódico',
-  semestral: 'semestral',
-};
+import { DESCRICAO_TRILHA, formatarDataHora, ROTULO_TRILHA } from '../theme/rotulos';
 
 export default function TelaNovaInspecao() {
   const estabelecimento = useEstabelecimento((estado) => estado.atual);
   const carregado = useEstabelecimento((estado) => estado.carregado);
 
-  // Enquanto o banco não foi lido, não dá para saber se existe cadastro.
   if (!carregado) {
     return (
       <View style={estilos.centro}>
@@ -47,95 +51,196 @@ export default function TelaNovaInspecao() {
     return <Redirect href="/cadastro" />;
   }
 
-  return <Checklist perfilId={estabelecimento.perfil_id} nome={estabelecimento.nome} />;
+  return <Trilhas estabelecimento={estabelecimento} />;
 }
 
-/**
- * Componente separado porque hooks (`useMemo`) não podem ficar depois
- * de um `return` condicional — a regra dos Hooks do React exige que
- * eles rodem sempre, na mesma ordem.
- */
-function Checklist({ perfilId, nome }: { perfilId: string; nome: string }) {
-  // Recalcula só quando o perfil muda. É isso que faz a lista trocar
-  // sozinha quando você edita o tipo do estabelecimento.
-  const grupos = useMemo(() => checklistDoPerfil(perfilId), [perfilId]);
+interface Dados {
+  contagem: Record<Trilha, number>;
+  emAndamento: Partial<Record<Trilha, ResumoInspecao>>;
+  ocultos: ItemOculto[];
+}
 
-  const secoes = grupos.map((grupo) => ({
-    title: grupo.titulo,
-    codigo: grupo.codigoRdc,
-    data: grupo.itens,
-  }));
+function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+  const [dados, setDados] = useState<Dados | null>(null);
 
-  const total = grupos.reduce((soma, grupo) => soma + grupo.itens.length, 0);
+  const recarregar = useCallback(() => {
+    const emAndamento: Partial<Record<Trilha, ResumoInspecao>> = {};
+    for (const inspecao of listarInspecoes(estabelecimento.id)) {
+      // A lista vem da mais recente para a mais antiga, então a primeira
+      // em andamento de cada trilha é a que deve ser retomada.
+      if (inspecao.status === 'em_andamento' && !emAndamento[inspecao.trilha]) {
+        emAndamento[inspecao.trilha] = inspecao;
+      }
+    }
+
+    setDados({
+      contagem: contarItensPorTrilha(estabelecimento.perfil_id, estabelecimento.id),
+      emAndamento,
+      ocultos: listarItensOcultos(estabelecimento.id),
+    });
+  }, [estabelecimento.id, estabelecimento.perfil_id]);
+
+  /**
+   * `useFocusEffect` roda toda vez que a tela volta a ficar visível —
+   * diferente do `useEffect`, que rodaria só na primeira vez.
+   *
+   * É o que faz os números se atualizarem quando você volta de uma
+   * inspeção: se marcou dois itens como "não se aplica", a contagem da
+   * trilha já aparece menor aqui.
+   */
+  useFocusEffect(recarregar);
+
+  if (!dados) {
+    return (
+      <View style={estilos.centro}>
+        <Text style={estilos.aviso}>Carregando…</Text>
+      </View>
+    );
+  }
+
+  const total = TRILHAS.reduce((soma, trilha) => soma + dados.contagem[trilha], 0);
 
   return (
-    <SectionList
-      style={estilos.tela}
-      contentContainerStyle={estilos.conteudo}
-      sections={secoes}
-      keyExtractor={(item) => item.id}
-      stickySectionHeadersEnabled={false}
-      ListHeaderComponent={
-        <View style={estilos.cabecalho}>
-          <Text style={estilos.titulo}>{nome}</Text>
-          <Text style={estilos.subtitulo}>
-            {total} exigências da RDC 216 se aplicam ao seu tipo de estabelecimento, organizadas
-            em {grupos.length} categorias.
-          </Text>
-          <View style={estilos.aviso3}>
-            <Text style={estilos.avisoTexto}>
-              Nesta fase o checklist é só leitura. Responder cada item é a próxima etapa.
-            </Text>
-          </View>
-        </View>
-      }
-      renderSectionHeader={({ section }) => (
-        <View style={estilos.cabecalhoSecao}>
-          <Text style={estilos.codigoSecao}>{section.codigo}</Text>
-          <Text style={estilos.tituloSecao}>{section.title}</Text>
-          <Text style={estilos.contagemSecao}>
-            {section.data.length} {section.data.length === 1 ? 'item' : 'itens'}
-          </Text>
-        </View>
-      )}
-      renderItem={({ item }) => <LinhaItem item={item} />}
-    />
+    <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
+      <Text style={estilos.titulo}>{estabelecimento.nome}</Text>
+      <Text style={estilos.subtitulo}>
+        {total} exigências da RDC 216 se aplicam ao seu tipo de estabelecimento, separadas em
+        três trilhas. Escolha uma para começar.
+      </Text>
+
+      {TRILHAS.map((trilha) => (
+        <CartaoTrilha
+          key={trilha}
+          trilha={trilha}
+          quantidade={dados.contagem[trilha]}
+          emAndamento={dados.emAndamento[trilha]}
+          aoAbrir={() => router.push(`/inspecao?trilha=${trilha}`)}
+        />
+      ))}
+
+      <ItensOcultos
+        ocultos={dados.ocultos}
+        aoReexibir={(item) => {
+          Alert.alert(
+            'Voltar a exibir?',
+            `O item ${item.codigo_rdc} volta a aparecer no checklist deste estabelecimento.`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Voltar a exibir',
+                onPress: () => {
+                  reexibirItem(estabelecimento.id, item.item_id);
+                  recarregar();
+                },
+              },
+            ],
+          );
+        }}
+      />
+    </ScrollView>
   );
 }
 
-function LinhaItem({ item }: { item: ItemChecklist }) {
+function CartaoTrilha({
+  trilha,
+  quantidade,
+  emAndamento,
+  aoAbrir,
+}: {
+  trilha: Trilha;
+  quantidade: number;
+  emAndamento: ResumoInspecao | undefined;
+  aoAbrir: () => void;
+}) {
+  const vazia = quantidade === 0;
+
   return (
-    <View style={estilos.item}>
-      <View style={estilos.itemTopo}>
-        <Text style={estilos.codigoItem}>{item.codigo_rdc}</Text>
-
-        {/* `critico` vem do banco como 0 ou 1 (o SQLite não tem booleano). */}
-        {item.critico === 1 ? (
-          <View style={[estilos.selo, estilos.seloCritico]}>
-            <Text style={estilos.seloCriticoTexto}>crítico</Text>
-          </View>
-        ) : null}
-
-        <View
-          style={[
-            estilos.selo,
-            item.frequencia === 'semestral' ? estilos.seloLegal : estilos.seloTrilha,
-          ]}
-        >
-          <Text
-            style={
-              item.frequencia === 'semestral'
-                ? estilos.seloLegalTexto
-                : estilos.seloTrilhaTexto
-            }
-          >
-            {ROTULO_TRILHA[item.frequencia]}
-            {item.periodicidade_dias ? ` · ${item.periodicidade_dias}d` : ''}
-          </Text>
+    <Pressable
+      style={({ pressed }) => [
+        estilos.cartao,
+        emAndamento && estilos.cartaoEmAndamento,
+        pressed && estilos.cartaoPressionado,
+        vazia && estilos.cartaoDesabilitado,
+      ]}
+      onPress={aoAbrir}
+      disabled={vazia}
+      accessibilityRole="button"
+    >
+      <View style={estilos.cartaoTopo}>
+        <Text style={estilos.cartaoTitulo}>{ROTULO_TRILHA[trilha]}</Text>
+        <View style={estilos.contador}>
+          <Text style={estilos.contadorTexto}>{quantidade}</Text>
         </View>
+        <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
       </View>
 
-      <Text style={estilos.textoItem}>{item.texto}</Text>
+      <Text style={estilos.cartaoDescricao}>{DESCRICAO_TRILHA[trilha]}</Text>
+
+      {emAndamento ? (
+        <View style={estilos.faixaAndamento}>
+          <Ionicons name="play-circle-outline" size={14} color={Cores.sobrePrimaria} />
+          <Text style={estilos.faixaAndamentoTexto}>
+            Em andamento desde {formatarDataHora(emAndamento.data_inicio)} ·{' '}
+            {emAndamento.respondidos} respondidos
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function ItensOcultos({
+  ocultos,
+  aoReexibir,
+}: {
+  ocultos: ItemOculto[];
+  aoReexibir: (item: ItemOculto) => void;
+}) {
+  // Começa fechada: é informação de revisão, não do dia a dia.
+  const [aberta, setAberta] = useState(false);
+
+  if (ocultos.length === 0) return null;
+
+  return (
+    <View style={estilos.ocultos}>
+      <Pressable
+        style={estilos.ocultosCabecalho}
+        onPress={() => setAberta((valor) => !valor)}
+        accessibilityRole="button"
+      >
+        <Ionicons name="eye-off-outline" size={16} color={Cores.textoSecundario} />
+        <Text style={estilos.ocultosTitulo}>
+          {ocultos.length} {ocultos.length === 1 ? 'item marcado' : 'itens marcados'} como “não
+          se aplica”
+        </Text>
+        <Ionicons
+          name={aberta ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={Cores.textoSuave}
+        />
+      </Pressable>
+
+      {aberta
+        ? ocultos.map((item) => (
+            <View key={item.item_id} style={estilos.ocultoItem}>
+              <Text style={estilos.ocultoCodigo}>
+                {item.codigo_rdc} · {item.categoria_nome}
+              </Text>
+              <Text style={estilos.ocultoTexto} numberOfLines={3}>
+                {item.texto}
+              </Text>
+              <Pressable
+                style={estilos.ocultoBotao}
+                onPress={() => aoReexibir(item)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="eye-outline" size={14} color={Cores.primariaTexto} />
+                <Text style={estilos.ocultoBotaoTexto}>Voltar a exibir</Text>
+              </Pressable>
+            </View>
+          ))
+        : null}
     </View>
   );
 }
@@ -151,56 +256,68 @@ const estilos = StyleSheet.create({
   },
   aviso: { fontSize: 14, color: Cores.textoSuave },
 
-  cabecalho: { marginBottom: 8 },
   titulo: { fontSize: 22, fontWeight: '700', color: Cores.texto },
-  subtitulo: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario, marginTop: 6 },
-  aviso3: {
-    backgroundColor: Cores.primariaClara,
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 14,
+  subtitulo: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: Cores.textoSecundario,
+    marginTop: 6,
+    marginBottom: 18,
   },
-  avisoTexto: { fontSize: 12, lineHeight: 18, color: Cores.sobrePrimaria },
 
-  cabecalhoSecao: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 26,
-    marginBottom: 10,
-  },
-  codigoSecao: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Cores.sobrePrimaria,
-    backgroundColor: Cores.primaria,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  tituloSecao: { flex: 1, fontSize: 14, fontWeight: '700', color: Cores.texto },
-  contagemSecao: { fontSize: 12, color: Cores.textoSuave },
-
-  item: {
+  cartao: {
     backgroundColor: Cores.superficie,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: Cores.borda,
   },
-  itemTopo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  codigoItem: { flex: 1, fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
-  textoItem: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario },
+  cartaoEmAndamento: { borderColor: Cores.primaria },
+  cartaoPressionado: { backgroundColor: Cores.fundo },
+  cartaoDesabilitado: { opacity: 0.5 },
+  cartaoTopo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cartaoTitulo: { flex: 1, fontSize: 16, fontWeight: '700', color: Cores.texto },
+  contador: {
+    backgroundColor: Cores.primariaClara,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  contadorTexto: { fontSize: 12, fontWeight: '700', color: Cores.sobrePrimaria },
+  cartaoDescricao: { fontSize: 13, lineHeight: 20, color: Cores.textoSecundario, marginTop: 6 },
 
-  selo: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  seloTrilha: { backgroundColor: Cores.fundo },
-  seloTrilhaTexto: { fontSize: 11, fontWeight: '600', color: Cores.textoSecundario },
-  // Semestral = prazo fixado pela norma, por isso ganha a cor da marca.
-  seloLegal: { backgroundColor: Cores.primariaClara },
-  seloLegalTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimaria },
-  // A paleta não tem vermelho: o magenta faz o papel de alerta.
-  seloCritico: { backgroundColor: Cores.acentoSuave },
-  seloCriticoTexto: { fontSize: 11, fontWeight: '700', color: Cores.acentoForte },
+  faixaAndamento: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Cores.primariaClara,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  faixaAndamentoTexto: { flex: 1, fontSize: 12, color: Cores.sobrePrimaria },
+
+  ocultos: {
+    marginTop: 14,
+    backgroundColor: Cores.superficie,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+    overflow: 'hidden',
+  },
+  ocultosCabecalho: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14 },
+  ocultosTitulo: { flex: 1, fontSize: 13, fontWeight: '600', color: Cores.textoSecundario },
+  ocultoItem: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: Cores.divisor,
+    paddingTop: 12,
+  },
+  ocultoCodigo: { fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
+  ocultoTexto: { fontSize: 13, lineHeight: 19, color: Cores.textoSecundario, marginTop: 4 },
+  ocultoBotao: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  ocultoBotaoTexto: { fontSize: 13, fontWeight: '600', color: Cores.primariaTexto },
 });

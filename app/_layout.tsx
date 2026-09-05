@@ -94,6 +94,17 @@ export default function LayoutRaiz() {
           name="cadastro"
           options={{ href: null, title: 'Estabelecimento' }}
         />
+
+        {/*
+          Mesma ideia para a execução da inspeção: ela não é uma aba, e
+          sim o destino de quem escolheu uma trilha em Nova Inspeção.
+          Não poderia ser aba nem se quiséssemos — ela depende do
+          parâmetro `?trilha=`, e uma aba não tem como informá-lo.
+        */}
+        <Tabs.Screen
+          name="inspecao"
+          options={{ href: null, title: 'Inspeção' }}
+        />
       </Tabs>
     </>
   );

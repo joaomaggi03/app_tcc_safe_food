@@ -80,12 +80,19 @@ exportação em PDF (RF08).
   filtrado por perfil em `app/nova-inspecao.tsx` (RF03, ainda só leitura).
   Estado global em `store/estabelecimento.ts` (Zustand). O schema v2 acrescentou
   as colunas `cidade` e `responsavel`.
-- **Próxima: Fase 3** — execução da inspeção: quatro respostas por item (RF06) e
-  "Não se Aplica" ocultando o item nas próximas inspeções (RF09).
+- **Fase 3 — concluída.** Execução da inspeção. O schema v3 acrescentou
+  `inspecao`, `resposta` e `item_oculto`. A tela `app/inspecao.tsx` recebe a
+  trilha por parâmetro (`/inspecao?trilha=diario`), grava cada resposta na hora
+  (RF06) e retoma inspeção em andamento. "Não se Aplica" grava em `item_oculto`
+  e o item some das próximas inspeções (RF09) — reversível pela lista de itens
+  ocultos em `app/nova-inspecao.tsx`, que virou o seletor das três trilhas.
+  `app/historico.tsx` lista as inspeções reais (sem score ainda).
+  Rótulos de apresentação centralizados em `theme/rotulos.ts`.
+- **Próxima: Fase 4** — score de conformidade (RF04), com peso e item crítico;
+  itens "não se aplica" e "não observado" ficam fora da conta.
 - **O fluxo de telas é provisório.** O autor não está convencido da navegação
   atual e pode redesenhá-la. Mantenha a regra de negócio em `db/` e `store/`,
-  fora das telas. A tela de execução da Fase 3 deve receber a trilha por
-  parâmetro, senão a Fase 5 obriga a reescrever a navegação dela.
+  fora das telas.
 - Paleta da marca em `theme/cores.ts` (primária #3CAE63). Nenhuma tela escreve
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
