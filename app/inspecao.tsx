@@ -38,7 +38,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -280,6 +280,20 @@ function Execucao({
     setBotaoNoHeader((atual) => (atual === passou ? atual : passou));
   }
 
+  /**
+   * Volta ao topo quando o cartão flutuante é tocado.
+   *
+   * `getScrollResponder()` dá acesso à ScrollView que a SectionList usa
+   * por dentro. É por ela, e não por `scrollToLocation`, porque este
+   * último precisa de uma seção com itens — e aqui as seções podem
+   * estar todas recolhidas, com `data: []`.
+   */
+  const listaRef = useRef<SectionList<Linha, { grupo: Bloco }>>(null);
+
+  function voltarAoTopo() {
+    listaRef.current?.getScrollResponder()?.scrollTo({ y: 0, animated: true });
+  }
+
   const navigation = useNavigation();
 
   useEffect(() => {
@@ -382,85 +396,148 @@ function Execucao({
   }));
 
   return (
-    <SectionList
-      style={estilos.tela}
-      contentContainerStyle={estilos.conteudo}
-      sections={secoes}
-      keyExtractor={(linha) => linha.chave}
-      stickySectionHeadersEnabled={false}
-      onScroll={aoRolar}
-      scrollEventThrottle={32}
-      // `extraData` avisa a lista de que algo de fora dos itens mudou.
-      // Sem isso, o SectionList não redesenharia as linhas ao responder.
-      extraData={respostas}
-      ListHeaderComponent={
-        <Cabecalho
-          nome={estabelecimento.nome}
-          trilha={trilha}
-          modo={modo}
-          respondidos={respondidos}
-          total={itens.length}
-          algumAberto={algumAberto}
-          aoAlternarTodos={alternarTodos}
-          aoMedirBotao={aoMedirBotao}
-          botaoNoHeader={botaoNoHeader}
-        />
-      }
-      renderSectionHeader={({ section }) => (
-        <CabecalhoGrupo
-          grupo={section.grupo}
-          aberto={abertos.includes(section.grupo.chave)}
-          respondidos={contarRespondidos(section.grupo, respostas)}
-          aoAlternar={() => alternar(section.grupo.chave)}
-        />
-      )}
-      renderItem={({ item: linha, section }) => {
-        if (linha.tipo === 'secao') {
-          // Só a diária completa mostra a seção da RDC lá dentro; nas
-          // outras trilhas o bloco JÁ É a seção, e repetir seria
-          // redundante.
-          return section.grupo.subdividido ? <CabecalhoSecao linha={linha} /> : null;
+    // A View existe para a barra flutuante poder ficar POR CIMA da
+    // lista: um elemento absoluto se posiciona em relação ao pai, e o
+    // pai da SectionList sozinha seria a tela inteira.
+    <View style={estilos.tela}>
+      <SectionList
+        ref={listaRef}
+        style={estilos.tela}
+        contentContainerStyle={estilos.conteudo}
+        sections={secoes}
+        keyExtractor={(linha) => linha.chave}
+        stickySectionHeadersEnabled={false}
+        onScroll={aoRolar}
+        scrollEventThrottle={32}
+        // `extraData` avisa a lista de que algo de fora dos itens mudou.
+        // Sem isso, o SectionList não redesenharia as linhas ao responder.
+        extraData={respostas}
+        ListHeaderComponent={
+          <Cabecalho
+            nome={estabelecimento.nome}
+            trilha={trilha}
+            modo={modo}
+            respondidos={respondidos}
+            total={itens.length}
+            algumAberto={algumAberto}
+            aoAlternarTodos={alternarTodos}
+            aoMedirBotao={aoMedirBotao}
+            botaoNoHeader={botaoNoHeader}
+          />
         }
+        renderSectionHeader={({ section }) => (
+          <CabecalhoGrupo
+            grupo={section.grupo}
+            aberto={abertos.includes(section.grupo.chave)}
+            respondidos={contarRespondidos(section.grupo, respostas)}
+            aoAlternar={() => alternar(section.grupo.chave)}
+          />
+        )}
+        renderItem={({ item: linha, section }) => {
+          if (linha.tipo === 'secao') {
+            // Só a diária completa mostra a seção da RDC lá dentro; nas
+            // outras trilhas o bloco JÁ É a seção, e repetir seria
+            // redundante.
+            return section.grupo.subdividido ? <CabecalhoSecao linha={linha} /> : null;
+          }
 
-        if (linha.tipo === 'verificacao') {
+          if (linha.tipo === 'verificacao') {
+            return (
+              <CartaoVerificacao
+                verificacao={linha.verificacao}
+                estado={estadoDaVerificacao(linha.verificacao.itens, respostas)}
+                detalhado={detalhadas.includes(linha.verificacao.id)}
+                aoResponder={(resposta) => responderVerificacao(linha.verificacao, resposta)}
+                aoDetalhar={(abrir) => alternarDetalhe(linha.verificacao.id, abrir)}
+              />
+            );
+          }
+
           return (
-            <CartaoVerificacao
-              verificacao={linha.verificacao}
-              estado={estadoDaVerificacao(linha.verificacao.itens, respostas)}
-              detalhado={detalhadas.includes(linha.verificacao.id)}
-              aoResponder={(resposta) => responderVerificacao(linha.verificacao, resposta)}
-              aoDetalhar={(abrir) => alternarDetalhe(linha.verificacao.id, abrir)}
+            <LinhaItem
+              item={linha.item}
+              recuado={linha.recuado}
+              resposta={respostas[linha.item.id]}
+              aoResponder={(escolha) => responder(linha.item, escolha)}
             />
           );
+        }}
+        ListEmptyComponent={
+          <Text style={estilos.vazio}>
+            Nenhum item nesta trilha para o seu tipo de estabelecimento.
+          </Text>
         }
+        ListFooterComponent={
+          itens.length > 0 ? (
+            <Pressable
+              style={({ pressed }) => [estilos.botaoConcluir, pressed && estilos.botaoPressionado]}
+              onPress={aoConcluir}
+              accessibilityRole="button"
+            >
+              <Ionicons name="checkmark-done" size={18} color={Cores.sobrePrimaria} />
+              <Text style={estilos.botaoConcluirTexto}>Concluir inspeção</Text>
+            </Pressable>
+          ) : null
+        }
+      />
 
-        return (
-          <LinhaItem
-            item={linha.item}
-            recuado={linha.recuado}
-            resposta={respostas[linha.item.id]}
-            aoResponder={(escolha) => responder(linha.item, escolha)}
-          />
-        );
-      }}
-      ListEmptyComponent={
-        <Text style={estilos.vazio}>
-          Nenhum item nesta trilha para o seu tipo de estabelecimento.
-        </Text>
-      }
-      ListFooterComponent={
-        itens.length > 0 ? (
-          <Pressable
-            style={({ pressed }) => [estilos.botaoConcluir, pressed && estilos.botaoPressionado]}
-            onPress={aoConcluir}
-            accessibilityRole="button"
-          >
-            <Ionicons name="checkmark-done" size={18} color={Cores.sobrePrimaria} />
-            <Text style={estilos.botaoConcluirTexto}>Concluir inspeção</Text>
-          </Pressable>
-        ) : null
-      }
-    />
+      {/* O cabeçalho da lista rola junto com o conteúdo e some. Este
+          cartão é a versão fixa dele: aparece no mesmo ponto em que o
+          cabeçalho sai de vista, para você sempre saber quanto falta
+          sem voltar ao topo. */}
+      {botaoNoHeader ? (
+        <CartaoFlutuante
+          respondidos={respondidos}
+          total={itens.length}
+          aoTocar={voltarAoTopo}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * O cartão de progresso fixo, sobreposto ao topo da lista.
+ *
+ * Ele é TOCÁVEL, e volta ao topo. Não é só um extra: um cartão grande
+ * cobrindo parte do conteúdo precisa responder ao toque, senão o dedo
+ * atravessaria para o item escondido atrás — e você marcaria "Conforme"
+ * numa verificação que nem está vendo.
+ */
+function CartaoFlutuante({
+  respondidos,
+  total,
+  aoTocar,
+}: {
+  respondidos: number;
+  total: number;
+  aoTocar: () => void;
+}) {
+  const porcentagem = total === 0 ? 0 : Math.round((respondidos / total) * 100);
+
+  return (
+    <View style={estilos.flutuanteArea} pointerEvents="box-none">
+      <Pressable
+        style={({ pressed }) => [estilos.flutuanteCartao, pressed && estilos.flutuantePressionado]}
+        onPress={aoTocar}
+        accessibilityRole="button"
+        accessibilityLabel={`${respondidos} de ${total} respondidos. Voltar ao topo.`}
+      >
+        {/* Uma linha só, para o cartão ficar fino: o rótulo da trilha
+            saiu porque o header da rota já diz onde você está. */}
+        <View style={estilos.flutuanteLinha}>
+          <Text style={estilos.flutuanteTexto}>
+            {respondidos} de {total} respondidos
+          </Text>
+          <Text style={estilos.flutuantePorcentagem}>{porcentagem}%</Text>
+          <Ionicons name="arrow-up-circle-outline" size={18} color={Cores.textoSuave} />
+        </View>
+
+        <View style={estilos.flutuanteBarra}>
+          <View style={[estilos.flutuanteBarraPreenchida, { width: `${porcentagem}%` }]} />
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
@@ -931,6 +1008,50 @@ const estilos = StyleSheet.create({
   // afasta e ainda mantém a área de toque confortável.
   botaoRecolherHeader: { paddingRight: 16, paddingLeft: 12, paddingVertical: 8 },
   pressionado: { opacity: 0.6 },
+
+  // --- cartão de progresso fixo ---
+  // A área ocupa a largura toda mas é `box-none`: só o cartão dentro
+  // dela recebe toque, e o resto da faixa deixa passar para a lista.
+  flutuanteArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
+  flutuanteCartao: {
+    // Translúcido: deixa entrever a lista passando por baixo, em vez de
+    // parecer que o conteúdo termina ali.
+    backgroundColor: Cores.superficieFlutuante,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 10,
+    // A sombra é o que faz o cartão parecer POR CIMA da lista, e não
+    // parte dela.
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  // Opacidade, e não outra cor de fundo: com o cartão translúcido, uma
+  // troca de cor apareceria como um piscar sujo.
+  flutuantePressionado: { opacity: 0.85 },
+  flutuanteLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  flutuanteTexto: { flex: 1, fontSize: 13, fontWeight: '600', color: Cores.texto },
+  flutuantePorcentagem: { fontSize: 15, fontWeight: '700', color: Cores.primariaTexto },
+  flutuanteBarra: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Cores.borda,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  flutuanteBarraPreenchida: { height: 5, backgroundColor: Cores.primaria },
   invisivel: { opacity: 0 },
 
   dica: {

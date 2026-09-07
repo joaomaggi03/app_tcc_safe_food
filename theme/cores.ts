@@ -51,6 +51,16 @@ export const cinza = {
 const branco = '#FFFFFF';
 
 /**
+ * Branco translúcido, para o que FLUTUA sobre o conteúdo.
+ *
+ * A transparência não é enfeite: ela mostra que há lista passando por
+ * baixo do elemento, em vez de sugerir que o conteúdo acabou ali. O
+ * valor é alto (93%) de propósito — o suficiente para o texto continuar
+ * legível sobre qualquer coisa que passe atrás.
+ */
+const brancoTranslucido = 'rgba(255, 255, 255, 0.93)';
+
+/**
  * NOMES SEMÂNTICOS — use estes nas telas.
  *
  * Sobre legibilidade: o verde 300 é claro demais para servir de TEXTO
@@ -78,6 +88,7 @@ export const Cores = {
   // Superfícies
   fundo: cinza[100],             // fundo das telas
   superficie: branco,            // cartões
+  superficieFlutuante: brancoTranslucido, // o que passa por cima do conteúdo
   borda: cinza[200],
   divisor: cinza[100],
 
