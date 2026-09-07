@@ -34,9 +34,16 @@ import {
   type ResumoInspecao,
   type Trilha,
 } from '../db/consultas';
+import { statusDasTrilhas, type StatusTrilha } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-import { DESCRICAO_TRILHA, formatarDataHora, ROTULO_TRILHA } from '../theme/rotulos';
+import {
+  DESCRICAO_TRILHA,
+  formatarDataHora,
+  ROTULO_TRILHA,
+  textoUltimaConclusao,
+  textoVencimento,
+} from '../theme/rotulos';
 
 export default function TelaNovaInspecao() {
   const estabelecimento = useEstabelecimento((estado) => estado.atual);
@@ -62,6 +69,8 @@ interface Dados {
   /** Quantas verificações a rotina guiada tem — o tamanho do modo Rotina. */
   verificacoesRotina: number;
   emAndamento: Partial<Record<Trilha, ResumoInspecao>>;
+  /** O prazo de cada trilha (RF05), na ordem de TRILHAS. */
+  prazos: StatusTrilha[];
   ocultos: ItemOculto[];
 }
 
@@ -92,9 +101,10 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         estabelecimento.id,
       ),
       emAndamento,
+      prazos: statusDasTrilhas(estabelecimento),
       ocultos: listarItensOcultos(estabelecimento.id),
     });
-  }, [estabelecimento.id, estabelecimento.perfil_id]);
+  }, [estabelecimento]);
 
   /**
    * `useFocusEffect` roda toda vez que a tela volta a ficar visível —
@@ -131,6 +141,7 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           quantidade={dados.contagem[trilha]}
           emAndamento={dados.emAndamento[trilha]}
           verificacoes={dados.verificacoesRotina}
+          prazo={dados.prazos.find((prazo) => prazo.trilha === trilha)}
           aoAbrir={(modo) => router.push(`/inspecao?trilha=${trilha}&modo=${modo}`)}
         />
       ))}
@@ -173,12 +184,14 @@ function CartaoTrilha({
   quantidade,
   verificacoes,
   emAndamento,
+  prazo,
   aoAbrir,
 }: {
   trilha: Trilha;
   quantidade: number;
   verificacoes: number;
   emAndamento: ResumoInspecao | undefined;
+  prazo: StatusTrilha | undefined;
   aoAbrir: (modo: ModoInspecao) => void;
 }) {
   const vazia = quantidade === 0;
@@ -197,6 +210,20 @@ function CartaoTrilha({
       </View>
 
       <Text style={estilos.cartaoDescricao}>{DESCRICAO_TRILHA[trilha]}</Text>
+
+      {/* O prazo (RF05) fica no cartão da trilha porque é aqui que ele
+          se resolve: ver que venceu e começar a inspeção é o mesmo
+          toque. */}
+      {prazo ? (
+        <View style={estilos.prazoLinha}>
+          <View style={[estilos.prazoSelo, estiloDoPrazo[prazo.situacao]]}>
+            <Text style={[estilos.prazoTexto, estiloTextoDoPrazo[prazo.situacao]]}>
+              {textoVencimento(prazo)}
+            </Text>
+          </View>
+          <Text style={estilos.prazoDetalhe}>{textoUltimaConclusao(prazo)}</Text>
+        </View>
+      ) : null}
 
       {emAndamento ? (
         <View style={estilos.faixaAndamento}>
@@ -319,6 +346,21 @@ function ItensOcultos({
   );
 }
 
+/** Cor do selo de prazo, por situação. */
+const estiloDoPrazo = StyleSheet.create({
+  em_dia: { backgroundColor: Cores.primariaClara },
+  vence_em_breve: { backgroundColor: Cores.fundo, borderWidth: 1, borderColor: Cores.borda },
+  vencida: { backgroundColor: Cores.acentoSuave },
+  nunca_feita: { backgroundColor: Cores.fundo, borderWidth: 1, borderColor: Cores.borda },
+});
+
+const estiloTextoDoPrazo = StyleSheet.create({
+  em_dia: { color: Cores.sobrePrimaria },
+  vence_em_breve: { color: Cores.texto },
+  vencida: { color: Cores.acentoForte },
+  nunca_feita: { color: Cores.textoSecundario },
+});
+
 const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
   conteudo: { padding: 20, paddingBottom: 40 },
@@ -360,6 +402,10 @@ const estilos = StyleSheet.create({
   },
   contadorTexto: { fontSize: 12, fontWeight: '700', color: Cores.sobrePrimaria },
   cartaoDescricao: { fontSize: 13, lineHeight: 20, color: Cores.textoSecundario, marginTop: 6 },
+  prazoLinha: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  prazoSelo: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  prazoTexto: { fontSize: 12, fontWeight: '700' },
+  prazoDetalhe: { fontSize: 12, color: Cores.textoSuave },
 
   faixaAndamento: {
     flexDirection: 'row',

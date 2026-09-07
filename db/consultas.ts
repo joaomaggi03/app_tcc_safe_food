@@ -9,6 +9,7 @@
 
 import type { MomentoDia } from '../data/rdc216';
 import { ROTINA_DIARIA } from '../data/rotina-diaria';
+import { diaLocalHaDias, diaLocalISO } from './datas';
 import { obterBanco } from './index';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -121,28 +122,10 @@ export function agoraISO(): string {
   return new Date().toISOString();
 }
 
-/**
- * O dia de HOJE no fuso do aparelho, como 'AAAA-MM-DD'.
- *
- * Não dá para usar `toISOString().slice(0, 10)` aqui: aquilo devolve a
- * data em UTC. Às 21h30 no Brasil (UTC-3) já é o dia seguinte em UTC, e
- * a diária de hoje cairia no dia de amanhã. Como "a diária de hoje" e a
- * contagem de dias do mês são perguntas sobre o dia LOCAL, montamos a
- * data a partir dos getters locais.
- */
-export function diaLocalISO(data: Date = new Date()): string {
-  const doisDigitos = (n: number) => String(n).padStart(2, '0');
-  return (
-    `${data.getFullYear()}-${doisDigitos(data.getMonth() + 1)}-${doisDigitos(data.getDate())}`
-  );
-}
-
-/** O dia local de N dias atrás, como 'AAAA-MM-DD' (janela do mês). */
-export function diaLocalHaDias(dias: number): string {
-  const data = new Date();
-  data.setDate(data.getDate() - dias);
-  return diaLocalISO(data);
-}
+// As contas de data moram em `db/datas.ts`, sem banco e sem React, para
+// poderem ser testadas fora do aparelho. Reexportadas aqui porque as
+// telas já importam tudo de `consultas`.
+export { diaLocalHaDias, diaLocalISO } from './datas';
 
 /** Texto vazio ou só com espaços vira NULL no banco. */
 function ouNulo(texto: string | undefined): string | null {
@@ -224,7 +207,10 @@ export const TRILHAS: Trilha[] = ['diario', 'periodico', 'semestral'];
 export interface ItemChecklist {
   id: string;
   codigo_rdc: string;
+  /** O texto completo da norma — mostrado só quando o usuário pede. */
   texto: string;
+  /** O resumo em tópicos, que é o que aparece no checklist. */
+  topicos: string[];
   frequencia: Trilha;
   /** Momento do expediente — preenchido só nos itens da trilha diária. */
   momento: MomentoDia | null;
@@ -305,6 +291,30 @@ export interface FiltroChecklist {
   somenteCriticos?: boolean;
 }
 
+/**
+ * A linha crua do SQL: igual ao `ItemChecklist`, mas com `topicos` ainda
+ * como o texto JSON que está gravado na coluna.
+ */
+type LinhaItem = Omit<ItemChecklist, 'topicos'> & { topicos: string | null };
+
+/**
+ * Converte a linha do banco no item que as telas usam.
+ *
+ * O `try` existe porque a coluna pode estar vazia num aparelho que
+ * migrou para o schema v5 mas ainda não rodou o seed novo — nesse
+ * intervalo o item aparece sem resumo, com o texto completo, em vez de
+ * derrubar a tela.
+ */
+function comTopicos(linha: LinhaItem): ItemChecklist {
+  let topicos: string[] = [];
+  try {
+    topicos = linha.topicos ? (JSON.parse(linha.topicos) as string[]) : [];
+  } catch {
+    topicos = [];
+  }
+  return { ...linha, topicos };
+}
+
 /** Títulos dos blocos da trilha diária, na ordem do expediente. */
 const TITULO_MOMENTO: Record<MomentoDia, string> = {
   abertura: 'Antes de abrir',
@@ -351,9 +361,9 @@ export function checklistDoPerfil(
        END, c.ordem, i.ordem`
     : 'c.ordem, i.ordem';
 
-  const linhas = obterBanco().getAllSync<ItemChecklist>(
-    `SELECT i.id, i.codigo_rdc, i.texto, i.frequencia, i.momento, i.critico, i.peso,
-            i.periodicidade_dias,
+  const linhas = obterBanco().getAllSync<LinhaItem>(
+    `SELECT i.id, i.codigo_rdc, i.texto, i.topicos, i.frequencia, i.momento,
+            i.critico, i.peso, i.periodicidade_dias,
             c.id         AS categoria_id,
             c.nome       AS categoria_nome,
             c.codigo_rdc AS categoria_codigo
@@ -367,7 +377,8 @@ export function checklistDoPerfil(
 
   const grupos: GrupoChecklist[] = [];
 
-  for (const linha of linhas) {
+  for (const bruta of linhas) {
+    const linha = comTopicos(bruta);
     // Cada linha carrega a sua chave de grupo: o momento do dia na
     // diária, a seção da RDC nas demais trilhas. Como o SQL já vem
     // ordenado por essa mesma chave, basta olhar o último grupo criado:

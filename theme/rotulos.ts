@@ -17,6 +17,7 @@ import type {
   Resposta,
   Trilha,
 } from '../db/consultas';
+import type { SituacaoTrilha, StatusTrilha } from '../db/periodicidade';
 
 /** Nome de cada trilha de periodicidade. */
 export const ROTULO_TRILHA: Record<Trilha, string> = {
@@ -105,6 +106,43 @@ export function faixaDoScore(valor: number | null): FaixaScore {
 /** O score como texto, já tratando o caso de não haver nada avaliado. */
 export function textoScore(valor: number | null): string {
   return valor === null ? '—' : `${valor}%`;
+}
+
+// ---------------------------------------------------------------
+// PERIODICIDADE (RF05)
+// ---------------------------------------------------------------
+
+/** Como cada situação de prazo é chamada na tela. */
+export const ROTULO_SITUACAO: Record<SituacaoTrilha, string> = {
+  em_dia: 'Em dia',
+  vence_em_breve: 'Vence em breve',
+  vencida: 'Vencida',
+  nunca_feita: 'Nunca realizada',
+};
+
+/**
+ * O prazo em linguagem de gente: "vence hoje", "vencida há 3 dias".
+ *
+ * Contar em dias, e não mostrar a data crua, é o que torna o número
+ * acionável — "vence em 2 dias" se lê sem fazer conta de cabeça.
+ */
+export function textoVencimento(status: StatusTrilha): string {
+  const dias = status.diasParaVencer;
+
+  if (dias < 0) {
+    const atraso = Math.abs(dias);
+    return `Vencida há ${atraso} ${atraso === 1 ? 'dia' : 'dias'}`;
+  }
+  if (dias === 0) return 'Vence hoje';
+  if (dias === 1) return 'Vence amanhã';
+  return `Vence em ${dias} dias`;
+}
+
+/** A frase de apoio: quando foi a última vez, ou que nunca houve. */
+export function textoUltimaConclusao(status: StatusTrilha): string {
+  return status.ultimaConclusao
+    ? `Última: ${formatarData(status.ultimaConclusao)}`
+    : 'Ainda não foi feita nenhuma vez';
 }
 
 /**

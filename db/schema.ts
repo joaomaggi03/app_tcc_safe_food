@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 4;
+export const VERSAO_SCHEMA = 5;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -225,6 +225,20 @@ const SCHEMA_V4 = `
 `;
 
 /**
+ * Versão 5: o RESUMO EM TÓPICOS de cada item.
+ *
+ * Guardado como JSON num TEXT, e não numa tabela `item_topico`. A regra
+ * que seguimos no projeto é: vira tabela o que o SQL precisa cruzar. Os
+ * perfis viraram `item_aplicabilidade` porque o filtro (RF03) é um JOIN;
+ * os tópicos nunca são filtrados nem ordenados — só exibidos, sempre
+ * junto do item que os contém. Uma tabela aqui só acrescentaria um JOIN
+ * a cada leitura do checklist, sem nada em troca.
+ */
+const SCHEMA_V5 = `
+  ALTER TABLE item ADD COLUMN topicos TEXT;
+`;
+
+/**
  * Cria/atualiza as tabelas conforme a versão do schema no aparelho.
  *
  * Roda em toda abertura do app, mas cada bloco só executa uma vez:
@@ -252,8 +266,9 @@ export function migrar(db: SQLiteDatabase): void {
     db.execSync(SCHEMA_V4);
   }
 
-  // Fases futuras entram aqui:
-  //   if (versaoAtual < 5) { db.execSync(SCHEMA_V5); }   // status_trilha (Fase 5)
+  if (versaoAtual < 5) {
+    db.execSync(SCHEMA_V5);
+  }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.
   // É seguro aqui porque VERSAO_SCHEMA é uma constante nossa, não entrada do usuário.

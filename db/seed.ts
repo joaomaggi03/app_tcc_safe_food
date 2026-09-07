@@ -25,7 +25,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { CATEGORIAS, ITENS, PERFIS } from '../data/rdc216';
 
 /** Suba este número sempre que editar o conteúdo de data/rdc216.ts. */
-export const VERSAO_SEED = 2;
+export const VERSAO_SEED = 3;
 
 const CHAVE_META = 'versao_seed';
 
@@ -90,13 +90,15 @@ export function semear(db: SQLiteDatabase): void {
     ITENS.forEach((item, indice) => {
       db.runSync(
         `INSERT OR REPLACE INTO item
-           (id, categoria_id, codigo_rdc, texto, frequencia, momento,
+           (id, categoria_id, codigo_rdc, texto, topicos, frequencia, momento,
             critico, peso, periodicidade_dias, ordem)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         item.id,
         item.categoriaId,
         item.codigoRdc,
         item.texto,
+        // O resumo vai como JSON: é lista, e o SQLite não tem tipo array.
+        JSON.stringify(item.topicos),
         item.frequencia,
         // `?? null` nos dois campos opcionais: só os itens diários têm
         // momento do dia, só os semestrais têm periodicidade legal.

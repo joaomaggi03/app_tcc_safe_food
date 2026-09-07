@@ -68,6 +68,7 @@ import {
   type Trilha,
   type VerificacaoChecklist,
 } from '../db/consultas';
+import { reagendarAlertas } from '../db/notificacoes';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import {
@@ -368,6 +369,13 @@ function Execucao({
     // `itens.length` é o tamanho do checklist AGORA; ele é congelado na
     // inspeção para o histórico não mudar quando o checklist mudar.
     concluirInspecao(inspecao.id, itens.length);
+
+    // Concluir zera o relógio desta trilha, então o alerta de vencimento
+    // precisa ser refeito (RF05). Sem `await`: a navegação não espera o
+    // sistema operacional, e um alerta que falhe ao agendar não pode
+    // impedir o usuário de ver o resultado.
+    void reagendarAlertas(estabelecimento);
+
     router.replace(`/resultado?id=${inspecao.id}`);
   }
 
@@ -889,6 +897,10 @@ function LinhaItem({
   recuado?: boolean;
   aoResponder: (resposta: Resposta) => void;
 }) {
+  // Cada item lembra sozinho se está com a norma aberta. Guardar isso na
+  // tela inteira faria a lista redesenhar por causa de um item só.
+  const [normaAberta, setNormaAberta] = useState(false);
+
   return (
     <View
       style={[
@@ -924,7 +936,44 @@ function LinhaItem({
         </View>
       </View>
 
-      <Text style={estilos.textoItem}>{item.texto}</Text>
+      {/* O RESUMO em tópicos é o que se lê no dia a dia; o texto da
+          norma fica a um toque, para quem precisar da redação exata. */}
+      {item.topicos.length > 0 ? (
+        <View style={estilos.topicos}>
+          {item.topicos.map((topico) => (
+            <View key={topico} style={estilos.topico}>
+              <Text style={estilos.marcador}>•</Text>
+              <Text style={estilos.topicoTexto}>{topico}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        // Sem resumo (item novo ou seed antigo), mostra o texto integral:
+        // é melhor um parágrafo longo do que um item vazio.
+        <Text style={estilos.textoItem}>{item.texto}</Text>
+      )}
+
+      {item.topicos.length > 0 ? (
+        <>
+          <Pressable
+            onPress={() => setNormaAberta((aberta) => !aberta)}
+            style={({ pressed }) => [estilos.verNorma, pressed && estilos.pressionado]}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: normaAberta }}
+          >
+            <Ionicons
+              name={normaAberta ? 'chevron-up' : 'document-text-outline'}
+              size={14}
+              color={Cores.textoSecundario}
+            />
+            <Text style={estilos.verNormaTexto}>
+              {normaAberta ? 'Ocultar texto da norma' : `Ver texto da norma ${item.codigo_rdc}`}
+            </Text>
+          </Pressable>
+
+          {normaAberta ? <Text style={estilos.textoNorma}>{item.texto}</Text> : null}
+        </>
+      ) : null}
 
       {/* Os quatro botões do RF06. Ficam em duas linhas de dois porque
           quatro lado a lado espremem o texto em tela de celular. */}
@@ -1159,6 +1208,24 @@ const estilos = StyleSheet.create({
   itemTopo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   codigoItem: { flex: 1, fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
   textoItem: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario },
+
+  topicos: { gap: 4 },
+  topico: { flexDirection: 'row', gap: 8 },
+  marcador: { fontSize: 14, lineHeight: 21, color: Cores.primaria },
+  topicoTexto: { flex: 1, fontSize: 14, lineHeight: 21, color: Cores.texto },
+  verNorma: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+  verNormaTexto: { fontSize: 12, fontWeight: '600', color: Cores.textoSecundario },
+  // O texto integral vem recuado e em cinza: é referência, não a
+  // instrução principal.
+  textoNorma: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: Cores.textoSecundario,
+    marginTop: 8,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: Cores.borda,
+  },
 
   selo: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   seloTrilha: { backgroundColor: Cores.fundo },

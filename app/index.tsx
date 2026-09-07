@@ -16,13 +16,16 @@
  * média entre elas seria dominada pelas diárias e esconderia justamente
  * a auditoria, que cobre a maior parte da norma.
  *
- * O status de vencimento de cada trilha entra aqui na Fase 5.
+ * Os PRAZOS (RF05) vêm logo abaixo: quando cada trilha vence, e o que
+ * está atrasado. Conformidade responde "como estou"; prazo responde "o
+ * que preciso fazer agora" — são perguntas diferentes, em cartões
+ * diferentes.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarCatalogo,
   listarPerfis,
@@ -32,13 +35,18 @@ import {
   type PainelInicio,
   type ResumoInspecao,
 } from '../db/consultas';
+import { alertasDisponiveis, testarAlerta } from '../db/notificacoes';
+import { statusDasTrilhas, type SituacaoTrilha, type StatusTrilha } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import {
   faixaDoScore,
   formatarData,
   ROTULO_MODO,
+  ROTULO_TRILHA,
   textoScore,
+  textoUltimaConclusao,
+  textoVencimento,
   type FaixaScore,
 } from '../theme/rotulos';
 
@@ -48,6 +56,17 @@ const COR_FAIXA: Record<FaixaScore, string> = {
   atencao: Cores.texto,
   ruim: Cores.acentoTexto,
   sem_dados: Cores.textoSuave,
+};
+
+/** Ícone e cor de cada situação de prazo. */
+const SINAL_SITUACAO: Record<
+  SituacaoTrilha,
+  { icone: 'checkmark-circle' | 'time-outline' | 'alert-circle' | 'ellipse-outline'; cor: string }
+> = {
+  em_dia: { icone: 'checkmark-circle', cor: Cores.primaria },
+  vence_em_breve: { icone: 'time-outline', cor: Cores.texto },
+  vencida: { icone: 'alert-circle', cor: Cores.acento },
+  nunca_feita: { icone: 'ellipse-outline', cor: Cores.textoSuave },
 };
 
 export default function TelaInicio() {
@@ -79,12 +98,14 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
     resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id),
   );
   const [painel, setPainel] = useState<PainelInicio | null>(null);
+  const [prazos, setPrazos] = useState<StatusTrilha[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       setResumo(resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id));
       setPainel(painelInicio(estabelecimento.id));
-    }, [estabelecimento.perfil_id, estabelecimento.id]),
+      setPrazos(statusDasTrilhas(estabelecimento));
+    }, [estabelecimento]),
   );
   const catalogo = useMemo(() => contarCatalogo(), []);
   const nomePerfil = useMemo(
@@ -129,6 +150,11 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         </Text>
       </View>
 
+      {/* --- Prazos das trilhas (RF05) --- */}
+      {prazos.length > 0 ? (
+        <PainelPrazos prazos={prazos} estabelecimento={estabelecimento} router={router} />
+      ) : null}
+
       {/* --- Conformidade (RF04) --- */}
       {painel ? <PainelConformidade painel={painel} router={router} /> : null}
 
@@ -142,17 +168,108 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         <Linha rotulo="Itens de prazo legal (água)" valor={resumo.semestral} />
       </Cartao>
 
-      {/* --- O que ainda não existe --- */}
-      <Cartao titulo="Próximas etapas" nota="O que este painel ainda vai mostrar.">
-        <Text style={estilos.pendente}>
-          • Vencimento de cada trilha e alertas antes do prazo (Fase 5)
-        </Text>
-      </Cartao>
-
       <Text style={estilos.rodape}>
         Base offline: {catalogo.itens} itens da RDC 216 em {catalogo.categorias} categorias.
       </Text>
     </ScrollView>
+  );
+}
+
+/**
+ * Os prazos das três trilhas.
+ *
+ * Vem ANTES da conformidade de propósito: a primeira pergunta ao abrir o
+ * app não é "quanto tirei", é "tem algo atrasado?". Cada linha leva
+ * direto para a inspeção correspondente, porque o prazo só se resolve de
+ * um jeito — fazendo a inspeção.
+ */
+function PainelPrazos({
+  prazos,
+  estabelecimento,
+  router,
+}: {
+  prazos: StatusTrilha[];
+  estabelecimento: Estabelecimento;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const pendentes = prazos.filter((prazo) => prazo.situacao !== 'em_dia').length;
+
+  return (
+    <View style={estilos.cartao}>
+      <Text style={estilos.tituloCartao}>Prazos</Text>
+      <Text style={estilos.notaCartao}>
+        {pendentes === 0
+          ? 'Todas as trilhas estão dentro do prazo.'
+          : `${pendentes} ${pendentes === 1 ? 'trilha precisa' : 'trilhas precisam'} de atenção.`}
+      </Text>
+      <View style={estilos.divisor} />
+
+      {prazos.map((prazo) => {
+        const sinal = SINAL_SITUACAO[prazo.situacao];
+        const destaque = prazo.situacao === 'vencida';
+
+        return (
+          <Pressable
+            key={prazo.trilha}
+            style={({ pressed }) => [estilos.linha, pressed && estilos.pressionado]}
+            onPress={() => router.push('/nova-inspecao')}
+            accessibilityRole="button"
+            accessibilityLabel={`${ROTULO_TRILHA[prazo.trilha]}: ${textoVencimento(prazo)}`}
+          >
+            <Ionicons name={sinal.icone} size={20} color={sinal.cor} />
+
+            <View style={estilos.flex}>
+              <Text style={estilos.rotulo}>{ROTULO_TRILHA[prazo.trilha]}</Text>
+              <Text style={estilos.subtexto}>{textoUltimaConclusao(prazo)}</Text>
+            </View>
+
+            <Text style={[estilos.prazo, destaque && estilos.prazoVencido]}>
+              {textoVencimento(prazo)}
+            </Text>
+          </Pressable>
+        );
+      })}
+
+      {/*
+        Os alertas chegam na véspera do vencimento — o que é útil na
+        prática, mas impossível de VER durante uma demonstração ou uma
+        banca. Este botão dispara em 5 segundos a notificação real da
+        trilha mais urgente, com o mesmo texto que ela teria no dia.
+
+        Quando o ambiente não suporta alertas (o Expo Go do Android
+        retirou o expo-notifications no SDK 53), o botão dá lugar a um
+        aviso. Esconder a limitação seria pior: o usuário acharia que
+        está sendo avisado dos vencimentos quando não está.
+      */}
+      {alertasDisponiveis() ? (
+        <Pressable
+          style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+          onPress={async () => {
+            const alvo = prazos.find((prazo) => prazo.situacao !== 'em_dia') ?? prazos[0];
+            const enviado = await testarAlerta(estabelecimento, alvo.trilha);
+
+            Alert.alert(
+              enviado ? 'Alerta a caminho' : 'Sem permissão',
+              enviado
+                ? `O aviso da trilha ${ROTULO_TRILHA[alvo.trilha].toLowerCase()} chega em 5 segundos. Você pode sair do app para vê-lo na barra de notificações.`
+                : 'O aparelho não autorizou notificações para este app. O resto do app continua funcionando normalmente — só os avisos de vencimento ficam desligados.',
+            );
+          }}
+          accessibilityRole="button"
+        >
+          <Ionicons name="notifications-outline" size={15} color={Cores.primariaTexto} />
+          <Text style={estilos.testarTexto}>Testar alerta agora</Text>
+        </Pressable>
+      ) : (
+        <View style={estilos.semAlertas}>
+          <Ionicons name="notifications-off-outline" size={15} color={Cores.textoSuave} />
+          <Text style={estilos.semAlertasTexto}>
+            Os avisos de vencimento não funcionam no Expo Go. Os prazos acima continuam
+            corretos; para receber as notificações, é preciso um development build do app.
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -396,6 +513,30 @@ const estilos = StyleSheet.create({
 
   subtexto: { fontSize: 12, color: Cores.textoSuave, marginTop: 2 },
   scoreValor: { fontSize: 22, fontWeight: '700' },
+  prazo: { fontSize: 13, fontWeight: '600', color: Cores.textoSecundario },
+  prazoVencido: { color: Cores.acentoTexto },
+  testar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+  },
+  testarTexto: { fontSize: 13, fontWeight: '600', color: Cores.primariaTexto },
+  semAlertas: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Cores.fundo,
+  },
+  semAlertasTexto: { flex: 1, fontSize: 12, lineHeight: 18, color: Cores.textoSecundario },
   detalhes: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 12 },
   detalhe: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   detalheTexto: { fontSize: 13, color: Cores.textoSecundario },

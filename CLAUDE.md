@@ -123,12 +123,43 @@ exportação em PDF (RF08).
     reescrita, e o banco continua gravando resposta item a item — o score não
     muda. Ao acrescentar um item diário no `rdc216.ts`, inclua-o em alguma
     verificação, senão ele só aparece no modo Completo.
-- **Próxima: Fase 5** — periodicidade em três trilhas + notificações (RF05).
-  Atenção: o plano propõe guardar `ultima_conclusao` em `status_trilha`, mas
-  isso agora já está em `inspecao.data_conclusao`/`dia_local` — considere
-  `status_trilha` só com `intervalo_dias` e derive a data, para as duas
-  fontes não discordarem. Verificar antes se o `expo-notifications` funciona
-  no Expo Go do SDK 57 ou se exige development build.
+- **Fase 5 — concluída.** Periodicidade e alertas (RF05), **sem tabela nova**:
+  o plano previa `status_trilha`, mas a última conclusão já está em
+  `inspecao.dia_local` e o intervalo editável em
+  `estabelecimento.periodicidade_auditoria_dias`. Vencimento é sempre
+  DERIVADO, nunca gravado.
+  - `db/datas.ts` — contas de data puras (soma, diferença, dia local).
+  - `db/vencimento.ts` — a regra pura de situação (em dia / vence em breve /
+    vencida / nunca feita). Os dois são puros de propósito: compilam e são
+    testáveis fora do aparelho, e é onde moram os casos de borda.
+  - `db/periodicidade.ts` — lê o banco e chama a regra; guarda os intervalos
+    (diária 1, periódica do estabelecimento, semestral 180) e as
+    antecedências de alerta (0 / 7 / 30 dias).
+  - `db/notificacoes.ts` — alertas **locais** do `expo-notifications`
+    (confirmado: local funciona no Expo Go; só push remoto no Android exige
+    development build). O agendamento é sempre recriado do zero — cancela
+    tudo e reagenda — para não haver uma segunda verdade sobre o que está
+    agendado. Roda na abertura do app (`app/_layout.tsx`) e ao concluir uma
+    inspeção.
+  - Telas: cartão "Prazos" no Início, selo de vencimento em cada trilha de
+    Nova Inspeção, e campo de periodicidade da auditoria no cadastro.
+  - Há um botão "Testar alerta agora" no Início, que dispara a notificação
+    real em 5 segundos — para demonstrar sem esperar o vencimento.
+- **Resumo em tópicos (schema v5).** Cada item tem `topicos: string[]` no
+  `data/rdc216.ts` — 1 a 3 frases curtas com o essencial, que é o que aparece
+  no checklist. O texto integral da norma fica atrás do botão "Ver texto da
+  norma". Os tópicos são reescrita nossa, não texto da RDC; por isso o
+  original continua acessível a um toque. Guardados como JSON num TEXT: a
+  regra aqui é *vira tabela o que o SQL precisa cruzar*, e tópicos só são
+  exibidos, nunca filtrados.
+- **`expo-notifications` não pode ser importado no topo de um arquivo.** Ele
+  lança erro no PRÓPRIO import no Expo Go do Android (SDK 53+), derrubando o
+  app. Em `db/notificacoes.ts` ele é carregado com `require` dentro de um
+  `try`; onde não existe, os alertas ficam desligados e o app roda inteiro.
+  Não use `executionEnvironment` para detectar: ele devolve `storeClient`
+  tanto no Expo Go quanto num development build.
+- **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
+  Fora do núcleo: plano de ação corretiva (RF07) e exportação em PDF (RF08).
 - **O fluxo de telas é provisório.** O autor não está convencido da navegação
   atual e pode redesenhá-la. Mantenha a regra de negócio em `db/` e `store/`,
   fora das telas.

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { reagendarAlertas } from '../db/notificacoes';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 
@@ -27,10 +28,28 @@ export default function LayoutRaiz() {
   // Fica aqui, no layout raiz, porque este componente envolve todas as
   // telas — assim qualquer uma já encontra o store preenchido.
   const carregar = useEstabelecimento((estado) => estado.carregar);
+  const estabelecimento = useEstabelecimento((estado) => estado.atual);
 
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  /**
+   * Reagenda os alertas de vencimento (RF05) sempre que o app abre ou
+   * o estabelecimento muda.
+   *
+   * Aqui, e não numa tela, porque o agendamento não pertence a nenhuma
+   * tela: ele tem que acontecer mesmo que o usuário abra o app direto no
+   * Histórico. E é reagendamento completo — cancela tudo e recria — para
+   * não existir uma segunda verdade sobre o que está agendado.
+   *
+   * A promessa é deliberadamente ignorada: se a permissão for negada, o
+   * app segue inteiro, só sem alerta. Nada aqui pode travar a abertura.
+   */
+  useEffect(() => {
+    if (!estabelecimento) return;
+    void reagendarAlertas(estabelecimento);
+  }, [estabelecimento]);
 
   return (
     <>

@@ -30,6 +30,11 @@ import {
   listarPerfis,
   salvarEstabelecimento,
 } from '../db/consultas';
+import {
+  definirIntervaloPeriodico,
+  INTERVALO_SEMESTRAL,
+  obterEstabelecimentoAtualizado,
+} from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 
@@ -58,6 +63,12 @@ export default function TelaCadastro() {
   const [perfilId, setPerfilId] = useState(estabelecimento?.perfil_id ?? '');
   const [cidade, setCidade] = useState(estabelecimento?.cidade ?? '');
   const [responsavel, setResponsavel] = useState(estabelecimento?.responsavel ?? '');
+  // Periodicidade da AUDITORIA (RF05). Fica como texto enquanto o
+  // usuário digita, porque um campo numérico controlado por número não
+  // deixa apagar o último dígito para trocar de valor.
+  const [periodicidade, setPeriodicidade] = useState(
+    String(estabelecimento?.periodicidade_auditoria_dias ?? 30),
+  );
   const [erro, setErro] = useState<string | null>(null);
 
   const podeSalvar = nome.trim().length > 0 && perfilId !== '';
@@ -65,9 +76,20 @@ export default function TelaCadastro() {
   function aoSalvar() {
     try {
       const salvo = salvarEstabelecimento({ nome, perfilId, cidade, responsavel });
+
+      // O intervalo é gravado à parte porque `salvarEstabelecimento`
+      // preserva de propósito o valor existente na edição — ele foi
+      // copiado do perfil na criação e não pode ser sobrescrito de volta
+      // ao padrão só porque o usuário salvou o cadastro de novo.
+      const dias = Number(periodicidade);
+      if (Number.isFinite(dias) && dias > 0) {
+        definirIntervaloPeriodico(salvo.id, dias);
+      }
+
       // Grava no banco primeiro, atualiza o store depois: assim o estado
-      // em memória nunca fica adiantado em relação ao disco.
-      definir(salvo);
+      // em memória nunca fica adiantado em relação ao disco. Relê para
+      // o store receber a periodicidade já com o limite aplicado.
+      definir(obterEstabelecimentoAtualizado(salvo.id));
       router.replace('/');
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
@@ -140,6 +162,23 @@ export default function TelaCadastro() {
           placeholderTextColor={Cores.textoSuave}
           maxLength={60}
         />
+
+        {/* --- Periodicidade da auditoria (RF05) --- */}
+        <Text style={estilos.rotuloCampo}>A cada quantos dias refazer a auditoria completa</Text>
+        <TextInput
+          style={estilos.campo}
+          value={periodicidade}
+          onChangeText={(texto) => setPeriodicidade(texto.replace(/[^0-9]/g, ''))}
+          placeholder="30"
+          placeholderTextColor={Cores.textoSuave}
+          keyboardType="number-pad"
+          maxLength={3}
+        />
+        <Text style={estilos.ajuda}>
+          Este prazo é uma boa prática assumida pelo app, e não uma exigência da RDC 216 — por
+          isso você pode ajustá-lo. A rotina diária é de 1 dia, e a verificação da água é de{' '}
+          {INTERVALO_SEMESTRAL} dias, este sim prazo fixado pela norma.
+        </Text>
 
         <Text style={estilos.rotuloCampo}>
           Responsável pela manipulação <Text style={estilos.opcional}>(opcional)</Text>
