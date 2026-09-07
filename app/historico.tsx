@@ -6,9 +6,9 @@
  * Lista as inspeções deste estabelecimento, da mais recente para a mais
  * antiga, lendo do SQLite local — funciona sem internet.
  *
- * Nesta fase cada linha mostra dado bruto: quantos itens foram
- * respondidos, quantos adequados e quantos inadequados. Transformar isso
- * em SCORE de conformidade (com peso e item crítico) é a Fase 4.
+ * Cada linha traz o score da inspeção (RF04) e o resultado dos itens
+ * críticos. Tocar numa inspeção concluída abre a tela de resultado, com
+ * o detalhamento por categoria.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,13 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { listarInspecoes, type Estabelecimento, type ResumoInspecao } from '../db/consultas';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-import { formatarDataHora, ROTULO_TRILHA } from '../theme/rotulos';
+import {
+  faixaDoScore,
+  formatarDataHora,
+  ROTULO_MODO,
+  ROTULO_TRILHA,
+  textoScore,
+} from '../theme/rotulos';
 
 export default function TelaHistorico() {
   const estabelecimento = useEstabelecimento((estado) => estado.atual);
@@ -90,39 +96,93 @@ function Lista({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           {estabelecimento.nome}
         </Text>
       }
-      renderItem={({ item }) => <Linha inspecao={item} />}
+      renderItem={({ item }) => (
+        <Linha
+          inspecao={item}
+          aoAbrir={
+            item.status === 'concluida'
+              ? () => router.push(`/resultado?id=${item.id}`)
+              : undefined
+          }
+        />
+      )}
     />
   );
 }
 
-function Linha({ inspecao }: { inspecao: ResumoInspecao }) {
+function Linha({
+  inspecao,
+  aoAbrir,
+}: {
+  inspecao: ResumoInspecao;
+  aoAbrir?: () => void;
+}) {
   const concluida = inspecao.status === 'concluida';
   // Numa inspeção concluída, a data que interessa é a do fechamento.
   const data = inspecao.data_conclusao ?? inspecao.data_inicio;
+  const faixa = faixaDoScore(inspecao.score.valor);
+
+  // Uma inspeção em andamento não mostra score: a nota parcial de um
+  // checklist pela metade não significa nada, e induziria a erro.
+  const mostrarScore = concluida && inspecao.score.valor !== null;
+  const criticosComFalha = inspecao.score.criticosAvaliados - inspecao.score.criticosAdequados;
 
   return (
-    <View style={estilos.cartao}>
+    <Pressable
+      style={({ pressed }) => [estilos.cartao, pressed && aoAbrir ? estilos.pressionado : null]}
+      onPress={aoAbrir}
+      disabled={!aoAbrir}
+      accessibilityRole={aoAbrir ? 'button' : undefined}
+    >
       <View style={estilos.cartaoTopo}>
-        <Text style={estilos.trilha}>{ROTULO_TRILHA[inspecao.trilha]}</Text>
-        <View style={[estilos.status, concluida ? estilos.statusConcluida : estilos.statusAberta]}>
-          <Text style={concluida ? estilos.statusConcluidaTexto : estilos.statusAbertaTexto}>
-            {concluida ? 'concluída' : 'em andamento'}
+        <View style={estilos.flex}>
+          <Text style={estilos.trilha}>
+            {ROTULO_TRILHA[inspecao.trilha]}
+            {inspecao.trilha === 'diario' ? ` · ${ROTULO_MODO[inspecao.modo]}` : ''}
           </Text>
+          <Text style={estilos.data}>{formatarDataHora(data)}</Text>
         </View>
-      </View>
 
-      <Text style={estilos.data}>{formatarDataHora(data)}</Text>
+        {mostrarScore ? (
+          <View style={[estilos.selo, estiloDaFaixa[faixa]]}>
+            <Text style={[estilos.seloTexto, estiloTextoDaFaixa[faixa]]}>
+              {textoScore(inspecao.score.valor)}
+            </Text>
+          </View>
+        ) : (
+          <View style={[estilos.status, concluida ? estilos.statusConcluida : estilos.statusAberta]}>
+            <Text style={concluida ? estilos.statusConcluidaTexto : estilos.statusAbertaTexto}>
+              {concluida ? 'sem avaliação' : 'em andamento'}
+            </Text>
+          </View>
+        )}
+      </View>
 
       <View style={estilos.numeros}>
         <Numero rotulo="respondidos" valor={inspecao.respondidos} />
-        <Numero rotulo="adequados" valor={inspecao.adequados} cor={Cores.primariaTexto} />
-        <Numero rotulo="inadequados" valor={inspecao.inadequados} cor={Cores.acentoTexto} />
+        <Numero rotulo="adequados" valor={inspecao.score.adequados} cor={Cores.primariaTexto} />
+        <Numero rotulo="inadequados" valor={inspecao.score.inadequados} cor={Cores.acentoTexto} />
+        {inspecao.score.criticosAvaliados > 0 ? (
+          <Numero
+            rotulo="críticos ok"
+            valor={`${inspecao.score.criticosAdequados}/${inspecao.score.criticosAvaliados}`}
+            cor={criticosComFalha > 0 ? Cores.acentoTexto : Cores.primariaTexto}
+          />
+        ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-function Numero({ rotulo, valor, cor }: { rotulo: string; valor: number; cor?: string }) {
+function Numero({
+  rotulo,
+  valor,
+  cor,
+}: {
+  rotulo: string;
+  valor: number | string;
+  cor?: string;
+}) {
   return (
     <View style={estilos.numero}>
       <Text style={[estilos.numeroValor, cor ? { color: cor } : null]}>{valor}</Text>
@@ -130,6 +190,21 @@ function Numero({ rotulo, valor, cor }: { rotulo: string; valor: number; cor?: s
     </View>
   );
 }
+
+/** Fundo e cor do selo do score, por faixa (ver theme/rotulos.ts). */
+const estiloDaFaixa = StyleSheet.create({
+  bom: { backgroundColor: Cores.primariaClara },
+  atencao: { backgroundColor: Cores.fundo },
+  ruim: { backgroundColor: Cores.acentoSuave },
+  sem_dados: { backgroundColor: Cores.fundo },
+});
+
+const estiloTextoDaFaixa = StyleSheet.create({
+  bom: { color: Cores.sobrePrimaria },
+  atencao: { color: Cores.texto },
+  ruim: { color: Cores.acentoForte },
+  sem_dados: { color: Cores.textoSuave },
+});
 
 const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
@@ -171,16 +246,20 @@ const estilos = StyleSheet.create({
     borderColor: Cores.borda,
   },
   cartaoTopo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  trilha: { flex: 1, fontSize: 16, fontWeight: '700', color: Cores.texto },
+  flex: { flex: 1 },
+  pressionado: { backgroundColor: Cores.fundo },
+  trilha: { fontSize: 16, fontWeight: '700', color: Cores.texto },
+  selo: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  seloTexto: { fontSize: 18, fontWeight: '700' },
   status: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusConcluida: { backgroundColor: Cores.primariaClara },
   statusConcluidaTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimaria },
   statusAberta: { backgroundColor: Cores.fundo },
   statusAbertaTexto: { fontSize: 11, fontWeight: '600', color: Cores.textoSecundario },
 
-  data: { fontSize: 13, color: Cores.textoSuave, marginTop: 4 },
+  data: { fontSize: 13, color: Cores.textoSuave, marginTop: 2 },
 
-  numeros: { flexDirection: 'row', gap: 24, marginTop: 12 },
+  numeros: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, marginTop: 12 },
   numero: {},
   numeroValor: { fontSize: 18, fontWeight: '700', color: Cores.texto },
   numeroRotulo: { fontSize: 11, color: Cores.textoSuave },

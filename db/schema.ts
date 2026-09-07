@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 3;
+export const VERSAO_SCHEMA = 4;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -193,6 +193,38 @@ const SCHEMA_V3 = `
 `;
 
 /**
+ * Versão 4 (Fase 4): o que o score precisa saber.
+ *
+ * `item.momento` — em que ponto do expediente o item diário pode ser
+ * verificado (ver `MomentoDia` em data/rdc216.ts). Coluna do catálogo:
+ * quem preenche é o seed, por isso a `VERSAO_SEED` sobe junto.
+ *
+ * `inspecao.modo` — 'essencial' (só os itens críticos) ou 'completa'.
+ * Guardado na inspeção para o histórico não comparar laranja com maçã:
+ * 100% num essencial de 12 itens não é 100% num completo de 32.
+ *
+ * `inspecao.total_itens` — quantos itens o checklist tinha no momento
+ * da conclusão. Precisa ser CONGELADO aqui: se fosse recontado depois,
+ * ocultar um item (RF09) mudaria retroativamente o "22 de 32
+ * observados" de uma inspeção antiga.
+ *
+ * `inspecao.dia_local` — a que DIA (no fuso do aparelho) a inspeção se
+ * refere, gravado na ABERTURA. Duas razões. Primeira: `data_conclusao` é
+ * UTC, e uma diária fechada às 21h30 no Brasil (UTC-3) já é o dia
+ * seguinte em UTC — cairia no dia errado. Segunda: é o que prende a
+ * diária ao seu dia, para uma inspeção deixada aberta ontem não ser
+ * retomada hoje e misturar as respostas de dois expedientes.
+ */
+const SCHEMA_V4 = `
+  ALTER TABLE item     ADD COLUMN momento     TEXT;
+  ALTER TABLE inspecao ADD COLUMN modo        TEXT;
+  ALTER TABLE inspecao ADD COLUMN total_itens INTEGER;
+  ALTER TABLE inspecao ADD COLUMN dia_local   TEXT;
+
+  CREATE INDEX IF NOT EXISTS idx_inspecao_dia ON inspecao (estabelecimento_id, trilha, dia_local);
+`;
+
+/**
  * Cria/atualiza as tabelas conforme a versão do schema no aparelho.
  *
  * Roda em toda abertura do app, mas cada bloco só executa uma vez:
@@ -216,8 +248,12 @@ export function migrar(db: SQLiteDatabase): void {
     db.execSync(SCHEMA_V3);
   }
 
+  if (versaoAtual < 4) {
+    db.execSync(SCHEMA_V4);
+  }
+
   // Fases futuras entram aqui:
-  //   if (versaoAtual < 4) { db.execSync(SCHEMA_V4); }   // status_trilha (Fase 5)
+  //   if (versaoAtual < 5) { db.execSync(SCHEMA_V5); }   // status_trilha (Fase 5)
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.
   // É seguro aqui porque VERSAO_SCHEMA é uma constante nossa, não entrada do usuário.

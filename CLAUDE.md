@@ -88,8 +88,47 @@ exportação em PDF (RF08).
   ocultos em `app/nova-inspecao.tsx`, que virou o seletor das três trilhas.
   `app/historico.tsx` lista as inspeções reais (sem score ainda).
   Rótulos de apresentação centralizados em `theme/rotulos.ts`.
-- **Próxima: Fase 4** — score de conformidade (RF04), com peso e item crítico;
-  itens "não se aplica" e "não observado" ficam fora da conta.
+- **Fase 4 — concluída.** Score de conformidade (RF04). Fórmula em
+  `db/consultas.ts`: percentual do peso dos adequados sobre o peso dos
+  avaliados, com `PESO_CRITICO = 3` substituindo o peso 2 do seed nos itens
+  críticos; "não se aplica" e "não observado" ficam fora do numerador E do
+  denominador; denominador zero devolve `null`, não 0%. O score é sempre
+  **derivado das respostas**, nunca gravado — e parte da tabela `resposta`,
+  não do checklist atual, para que uma inspeção antiga não mude de nota
+  quando o checklist mudar. Tela de resultado em `app/resultado.tsx` (score,
+  críticos em destaque, cobertura e score por categoria da RDC).
+  Schema v4: `item.momento`, `inspecao.modo`, `inspecao.total_itens` e
+  `inspecao.dia_local` (dia no fuso do aparelho — `data_conclusao` é UTC e
+  jogaria uma diária das 21h30 para o dia seguinte).
+- **Decisões da Fase 4 que valem para o TCC:**
+  - O Início mostra **quatro leituras** (diária de hoje, rotina do mês,
+    última auditoria, status da água) e não uma média geral: num mês há ~26
+    diárias contra 1 auditoria, e qualquer média entre elas seria dominada
+    pelas diárias, escondendo a auditoria.
+  - A trilha diária **não é de início de expediente**: dos 32 itens, 11 são
+    estado conferível antes de abrir, 19 só existem com a operação rodando
+    e 2 a norma amarra ao fim do trabalho. Por isso a inspeção diária fica
+    **aberta o dia todo** e é concluída no fechamento, e os itens são
+    marcados com `momento` (`data/rdc216.ts`) para aparecerem na ordem do
+    expediente.
+  - A diária tem dois modos: **Rotina** (as verificações guiadas de
+    `data/rotina-diaria.ts`) e **Completa** (item a item). O modo fica gravado
+    na inspeção, para o histórico não comparar preenchimentos diferentes.
+    (`essencial` é valor legado no banco, de inspeções antigas.)
+  - **A rotina guiada** existe porque os itens diários estão redigidos na
+    linguagem da norma e são difíceis de responder no meio do expediente.
+    As 11 verificações (12 nos perfis móveis) reagrupam os mesmos 32 itens em
+    perguntas técnicas que se respondem de uma vez, **citando os artigos da
+    RDC que cada uma cobre**. O agrupamento é decisão do app; a norma não é
+    reescrita, e o banco continua gravando resposta item a item — o score não
+    muda. Ao acrescentar um item diário no `rdc216.ts`, inclua-o em alguma
+    verificação, senão ele só aparece no modo Completo.
+- **Próxima: Fase 5** — periodicidade em três trilhas + notificações (RF05).
+  Atenção: o plano propõe guardar `ultima_conclusao` em `status_trilha`, mas
+  isso agora já está em `inspecao.data_conclusao`/`dia_local` — considere
+  `status_trilha` só com `intervalo_dias` e derive a data, para as duas
+  fontes não discordarem. Verificar antes se o `expo-notifications` funciona
+  no Expo Go do SDK 57 ou se exige development build.
 - **O fluxo de telas é provisório.** O autor não está convencido da navegação
   atual e pode redesenhá-la. Mantenha a regra de negócio em `db/` e `store/`,
   fora das telas.
@@ -97,3 +136,6 @@ exportação em PDF (RF08).
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
   Ao editar `data/rdc216.ts`, suba a `VERSAO_SEED` em `db/seed.ts`.
+  Colunas novas entram sempre num bloco `SCHEMA_Vn` novo, nunca editando um
+  bloco antigo. `ALTER TABLE` acrescenta a coluna no FIM da tabela: use
+  sempre colunas nomeadas no INSERT.

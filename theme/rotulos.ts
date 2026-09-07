@@ -10,7 +10,13 @@
  * uma palavra é mexer numa linha.
  */
 
-import type { Resposta, Trilha } from '../db/consultas';
+import type {
+  EstadoVerificacao,
+  ModoInspecao,
+  MomentoDia,
+  Resposta,
+  Trilha,
+} from '../db/consultas';
 
 /** Nome de cada trilha de periodicidade. */
 export const ROTULO_TRILHA: Record<Trilha, string> = {
@@ -53,6 +59,53 @@ export const ROTULO_RESPOSTA: Record<Resposta, string> = {
   nao_se_aplica: 'Não se aplica',
   nao_observado: 'Não observado',
 };
+
+/** Momento do expediente em que o item diário é verificado. */
+export const ROTULO_MOMENTO: Record<MomentoDia, string> = {
+  abertura: 'antes de abrir',
+  servico: 'durante o serviço',
+  fechamento: 'no fechamento',
+};
+
+/**
+ * Os modos da trilha diária. 'Essencial' é legado — só aparece em
+ * inspeções gravadas antes da rotina guiada existir.
+ */
+export const ROTULO_MODO: Record<ModoInspecao, string> = {
+  rotina: 'Rotina',
+  completa: 'Completa',
+  essencial: 'Essencial',
+};
+
+/** As três respostas do cartão de verificação da rotina. */
+export const ROTULO_ESTADO: Record<EstadoVerificacao, string> = {
+  conforme: 'Conforme',
+  nao_conforme: 'Não conforme',
+  nao_avaliado: 'Não avaliado',
+  parcial: 'Parcial',
+  pendente: 'Pendente',
+};
+
+/**
+ * FAIXAS DO SCORE.
+ *
+ * Os cortes (90 e 70) são decisão do app, não da RDC — a norma não
+ * pontua nem classifica estabelecimentos. Servem só para dar cor e
+ * leitura rápida ao número; a nota em si continua sendo o percentual.
+ */
+export type FaixaScore = 'bom' | 'atencao' | 'ruim' | 'sem_dados';
+
+export function faixaDoScore(valor: number | null): FaixaScore {
+  if (valor === null) return 'sem_dados';
+  if (valor >= 90) return 'bom';
+  if (valor >= 70) return 'atencao';
+  return 'ruim';
+}
+
+/** O score como texto, já tratando o caso de não haver nada avaliado. */
+export function textoScore(valor: number | null): string {
+  return valor === null ? '—' : `${valor}%`;
+}
 
 /**
  * Data ISO do banco -> 'DD/MM/AAAA'.

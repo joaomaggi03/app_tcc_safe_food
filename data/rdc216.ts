@@ -59,6 +59,23 @@ export type PerfilId =
 
 export type FrequenciaCheck = 'diario' | 'periodico' | 'semestral';
 
+/**
+ * MOMENTO DO DIA em que o item da trilha diária pode ser verificado.
+ *
+ * Não vem da RDC: é decisão do app, da mesma natureza da `frequencia`.
+ * Nasceu de uma constatação sobre os próprios itens — a trilha diária
+ * NÃO é um checklist de início de expediente. Dos 32 itens diários,
+ * só 11 são estado conferível com a cozinha parada; 19 só existem com
+ * a operação rodando (temperatura de cozimento, lavagem de mãos,
+ * contaminação cruzada) e 2 a norma amarra ao fim do trabalho
+ * (4.2.4, "logo após o fim do trabalho", e o manejo do lixo em 4.5.3).
+ *
+ * Por isso a inspeção diária é preenchida AO LONGO do dia e concluída
+ * no fechamento — e esta flag é o que permite ordenar o checklist na
+ * ordem do expediente em vez da ordem da norma.
+ */
+export type MomentoDia = 'abertura' | 'servico' | 'fechamento';
+
 export interface Perfil {
   id: PerfilId;
   nome: string;
@@ -86,6 +103,8 @@ export interface ItemChecklist {
   perfis: PerfilId[];
   /** Trilha de periodicidade do item. */
   frequencia: FrequenciaCheck;
+  /** Momento do expediente em que dá para verificar — só nos itens diários. */
+  momento?: MomentoDia;
   critico: boolean;
   peso: number;
   /** Frequência legal fixa (em dias), presente apenas nos itens 'semestral'. */
@@ -158,7 +177,7 @@ export const ITENS: ItemChecklist[] = [
   { id: 'higi_01', categoriaId: 'higienizacao', codigoRdc: '4.2.1', texto: 'Instalações, equipamentos e utensílios são mantidos limpos, com higienização feita por pessoas capacitadas e na frequência necessária.', perfis: TODOS, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'higi_02', categoriaId: 'higienizacao', codigoRdc: '4.2.2', texto: 'As caixas de gordura são limpas periodicamente e os resíduos descartados conforme a legislação.', perfis: FIXOS, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'higi_03', categoriaId: 'higienizacao', codigoRdc: '4.2.3', texto: 'As operações de limpeza e desinfecção que não são rotineiras estão registradas.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'higi_04', categoriaId: 'higienizacao', codigoRdc: '4.2.4', texto: 'A área de preparo é higienizada sempre que necessário e logo após o fim do trabalho, sem uso de odorizantes nas áreas de alimentos.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'higi_04', categoriaId: 'higienizacao', codigoRdc: '4.2.4', texto: 'A área de preparo é higienizada sempre que necessário e logo após o fim do trabalho, sem uso de odorizantes nas áreas de alimentos.', perfis: TODOS, frequencia: 'diario', momento: 'fechamento', critico: false, peso: 1 },
   { id: 'higi_05', categoriaId: 'higienizacao', codigoRdc: '4.2.5', texto: 'Os produtos de limpeza são regularizados no Ministério da Saúde, usados conforme o fabricante e guardados em local separado dos alimentos.', perfis: TODOS, frequencia: 'periodico', critico: true, peso: 2 },
   { id: 'higi_06', categoriaId: 'higienizacao', codigoRdc: '4.2.6', texto: 'Os utensílios de limpeza estão conservados e são diferentes para instalações e para partes que tocam o alimento.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'higi_07', categoriaId: 'higienizacao', codigoRdc: '4.2.7', texto: 'Quem limpa as instalações sanitárias usa uniforme diferente do usado na manipulação de alimentos.', perfis: FIXOS, frequencia: 'periodico', critico: false, peso: 1 },
@@ -177,16 +196,16 @@ export const ITENS: ItemChecklist[] = [
   // --- 4.5 MANEJO DOS RESÍDUOS ---
   { id: 'resi_01', categoriaId: 'residuos', codigoRdc: '4.5.1', texto: 'Há recipientes de lixo identificados, íntegros e de fácil higienização, em número suficiente.', perfis: TODOS, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'resi_02', categoriaId: 'residuos', codigoRdc: '4.5.2', texto: 'Os coletores das áreas de preparo têm tampa acionada sem contato manual (pedal).', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'resi_03', categoriaId: 'residuos', codigoRdc: '4.5.3', texto: 'O lixo é coletado com frequência e estocado em local fechado, isolado das áreas de preparo e armazenamento.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'resi_03', categoriaId: 'residuos', codigoRdc: '4.5.3', texto: 'O lixo é coletado com frequência e estocado em local fechado, isolado das áreas de preparo e armazenamento.', perfis: TODOS, frequencia: 'diario', momento: 'fechamento', critico: false, peso: 1 },
 
   // --- 4.6 MANIPULADORES ---
   { id: 'mani_01', categoriaId: 'manipuladores', codigoRdc: '4.6.1', texto: 'O controle de saúde dos manipuladores é feito e registrado conforme a legislação.', perfis: TODOS, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'mani_02', categoriaId: 'manipuladores', codigoRdc: '4.6.2', texto: 'Manipuladores com lesões ou sintomas de doença são afastados do preparo de alimentos enquanto durar a condição.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'mani_03', categoriaId: 'manipuladores', codigoRdc: '4.6.3', texto: 'Os manipuladores têm asseio pessoal e uniformes limpos, trocados no mínimo diariamente e usados só no estabelecimento.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'mani_04', categoriaId: 'manipuladores', codigoRdc: '4.6.4', texto: 'Os manipuladores lavam as mãos ao chegar, antes e depois de manipular alimentos, após o sanitário e sempre que necessário.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
+  { id: 'mani_02', categoriaId: 'manipuladores', codigoRdc: '4.6.2', texto: 'Manipuladores com lesões ou sintomas de doença são afastados do preparo de alimentos enquanto durar a condição.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: true, peso: 2 },
+  { id: 'mani_03', categoriaId: 'manipuladores', codigoRdc: '4.6.3', texto: 'Os manipuladores têm asseio pessoal e uniformes limpos, trocados no mínimo diariamente e usados só no estabelecimento.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
+  { id: 'mani_04', categoriaId: 'manipuladores', codigoRdc: '4.6.4', texto: 'Os manipuladores lavam as mãos ao chegar, antes e depois de manipular alimentos, após o sanitário e sempre que necessário.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
   { id: 'mani_05', categoriaId: 'manipuladores', codigoRdc: '4.6.4', texto: 'Há cartazes de orientação sobre a correta lavagem das mãos em locais de fácil visualização, inclusive nos sanitários.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'mani_06', categoriaId: 'manipuladores', codigoRdc: '4.6.5', texto: 'Durante o trabalho, os manipuladores não fumam, não falam sem necessidade, não comem e não manuseiam dinheiro.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'mani_07', categoriaId: 'manipuladores', codigoRdc: '4.6.6', texto: 'Os manipuladores usam cabelos presos e protegidos, sem barba, com unhas curtas e sem esmalte, e sem adornos ou maquiagem.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'mani_06', categoriaId: 'manipuladores', codigoRdc: '4.6.5', texto: 'Durante o trabalho, os manipuladores não fumam, não falam sem necessidade, não comem e não manuseiam dinheiro.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'mani_07', categoriaId: 'manipuladores', codigoRdc: '4.6.6', texto: 'Os manipuladores usam cabelos presos e protegidos, sem barba, com unhas curtas e sem esmalte, e sem adornos ou maquiagem.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
   { id: 'mani_08', categoriaId: 'manipuladores', codigoRdc: '4.6.7', texto: 'Os manipuladores são capacitados periodicamente em higiene e manipulação, com comprovação documentada.', perfis: TODOS, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'mani_09', categoriaId: 'manipuladores', codigoRdc: '4.6.8', texto: 'Os visitantes cumprem as mesmas regras de higiene e saúde dos manipuladores.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
 
@@ -199,38 +218,38 @@ export const ITENS: ItemChecklist[] = [
   { id: 'mate_06', categoriaId: 'materias_primas', codigoRdc: '4.7.6', texto: 'Os insumos ficam sobre paletes, estrados ou prateleiras de material lavável, com espaçamento para ventilação e limpeza.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
 
   // --- 4.8 PREPARAÇÃO DO ALIMENTO (manuseio do dia -> diário) ---
-  { id: 'prep_01', categoriaId: 'preparo', codigoRdc: '4.8.1', texto: 'As matérias-primas e ingredientes usados no preparo estão em boas condições higiênico-sanitárias.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'prep_01', categoriaId: 'preparo', codigoRdc: '4.8.1', texto: 'As matérias-primas e ingredientes usados no preparo estão em boas condições higiênico-sanitárias.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
   { id: 'prep_02', categoriaId: 'preparo', codigoRdc: '4.8.2', texto: 'A quantidade de funcionários e equipamentos é compatível com o volume e a complexidade das preparações.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'prep_03', categoriaId: 'preparo', codigoRdc: '4.8.3', texto: 'São adotadas medidas contra contaminação cruzada, evitando contato entre alimentos crus, semi-preparados e prontos.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_04', categoriaId: 'preparo', codigoRdc: '4.8.4', texto: 'Quem manipula alimentos crus lava e higieniza as mãos antes de tocar em alimentos preparados.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_05', categoriaId: 'preparo', codigoRdc: '4.8.5', texto: 'Os perecíveis ficam à temperatura ambiente apenas pelo tempo mínimo necessário ao preparo.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_06', categoriaId: 'preparo', codigoRdc: '4.8.6', texto: 'Sobras de matérias-primas são acondicionadas e identificadas com produto, data de fracionamento e validade após aberto.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_07', categoriaId: 'preparo', codigoRdc: '4.8.7', texto: 'As embalagens dos ingredientes são limpas antes de abertas.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_08', categoriaId: 'preparo', codigoRdc: '4.8.8', texto: 'No cozimento, todas as partes do alimento atingem no mínimo 70 °C (ou combinação de tempo/temperatura equivalente).', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_09', categoriaId: 'preparo', codigoRdc: '4.8.9', texto: 'A eficácia do cozimento é avaliada pela temperatura, tempo e mudança de cor e textura no centro do alimento.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_10', categoriaId: 'preparo', codigoRdc: '4.8.10', texto: 'Na fritura, são adotadas medidas para que o óleo e a gordura não contaminem quimicamente o alimento.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_11', categoriaId: 'preparo', codigoRdc: '4.8.11', texto: 'Os óleos são aquecidos a no máximo 180 °C e trocados assim que houver alteração de cor, cheiro, espuma ou fumaça.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_12', categoriaId: 'preparo', codigoRdc: '4.8.12', texto: 'Alimentos congelados são descongelados antes do cozimento (salvo orientação do fabricante para cozinhar ainda congelado).', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_13', categoriaId: 'preparo', codigoRdc: '4.8.13', texto: 'O descongelamento é feito sob refrigeração (abaixo de 5 °C) ou em micro-ondas com cocção imediata — nunca à temperatura ambiente.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_14', categoriaId: 'preparo', codigoRdc: '4.8.14', texto: 'Alimentos descongelados que não forem usados na hora são mantidos refrigerados e não são recongelados.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_15', categoriaId: 'preparo', codigoRdc: '4.8.15', texto: 'Na conservação a quente, o alimento fica acima de 60 °C por no máximo 6 horas.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_16', categoriaId: 'preparo', codigoRdc: '4.8.16', texto: 'No resfriamento, o alimento passa de 60 °C para 10 °C em até 2 horas e depois é mantido abaixo de 5 °C (ou congelado a -18 °C).', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'prep_17', categoriaId: 'preparo', codigoRdc: '4.8.17', texto: 'O alimento preparado e refrigerado a 4 °C ou menos é consumido em até 5 dias.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_18', categoriaId: 'preparo', codigoRdc: '4.8.18', texto: 'Alimentos armazenados refrigerados/congelados são identificados (designação, data de preparo, validade) e têm a temperatura monitorada.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'prep_19', categoriaId: 'preparo', codigoRdc: '4.8.19', texto: 'Alimentos consumidos crus passam por higienização com produto regularizado, sem deixar resíduos.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
+  { id: 'prep_03', categoriaId: 'preparo', codigoRdc: '4.8.3', texto: 'São adotadas medidas contra contaminação cruzada, evitando contato entre alimentos crus, semi-preparados e prontos.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_04', categoriaId: 'preparo', codigoRdc: '4.8.4', texto: 'Quem manipula alimentos crus lava e higieniza as mãos antes de tocar em alimentos preparados.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_05', categoriaId: 'preparo', codigoRdc: '4.8.5', texto: 'Os perecíveis ficam à temperatura ambiente apenas pelo tempo mínimo necessário ao preparo.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_06', categoriaId: 'preparo', codigoRdc: '4.8.6', texto: 'Sobras de matérias-primas são acondicionadas e identificadas com produto, data de fracionamento e validade após aberto.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_07', categoriaId: 'preparo', codigoRdc: '4.8.7', texto: 'As embalagens dos ingredientes são limpas antes de abertas.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_08', categoriaId: 'preparo', codigoRdc: '4.8.8', texto: 'No cozimento, todas as partes do alimento atingem no mínimo 70 °C (ou combinação de tempo/temperatura equivalente).', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_09', categoriaId: 'preparo', codigoRdc: '4.8.9', texto: 'A eficácia do cozimento é avaliada pela temperatura, tempo e mudança de cor e textura no centro do alimento.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_10', categoriaId: 'preparo', codigoRdc: '4.8.10', texto: 'Na fritura, são adotadas medidas para que o óleo e a gordura não contaminem quimicamente o alimento.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_11', categoriaId: 'preparo', codigoRdc: '4.8.11', texto: 'Os óleos são aquecidos a no máximo 180 °C e trocados assim que houver alteração de cor, cheiro, espuma ou fumaça.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_12', categoriaId: 'preparo', codigoRdc: '4.8.12', texto: 'Alimentos congelados são descongelados antes do cozimento (salvo orientação do fabricante para cozinhar ainda congelado).', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_13', categoriaId: 'preparo', codigoRdc: '4.8.13', texto: 'O descongelamento é feito sob refrigeração (abaixo de 5 °C) ou em micro-ondas com cocção imediata — nunca à temperatura ambiente.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_14', categoriaId: 'preparo', codigoRdc: '4.8.14', texto: 'Alimentos descongelados que não forem usados na hora são mantidos refrigerados e não são recongelados.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: false, peso: 1 },
+  { id: 'prep_15', categoriaId: 'preparo', codigoRdc: '4.8.15', texto: 'Na conservação a quente, o alimento fica acima de 60 °C por no máximo 6 horas.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_16', categoriaId: 'preparo', codigoRdc: '4.8.16', texto: 'No resfriamento, o alimento passa de 60 °C para 10 °C em até 2 horas e depois é mantido abaixo de 5 °C (ou congelado a -18 °C).', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'prep_17', categoriaId: 'preparo', codigoRdc: '4.8.17', texto: 'O alimento preparado e refrigerado a 4 °C ou menos é consumido em até 5 dias.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
+  { id: 'prep_18', categoriaId: 'preparo', codigoRdc: '4.8.18', texto: 'Alimentos armazenados refrigerados/congelados são identificados (designação, data de preparo, validade) e têm a temperatura monitorada.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
+  { id: 'prep_19', categoriaId: 'preparo', codigoRdc: '4.8.19', texto: 'Alimentos consumidos crus passam por higienização com produto regularizado, sem deixar resíduos.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
   { id: 'prep_20', categoriaId: 'preparo', codigoRdc: '4.8.20', texto: 'Existe controle e garantia de qualidade dos alimentos preparados, de forma documentada.', perfis: FIXOS_TRUCK, frequencia: 'periodico', critico: false, peso: 1 },
 
   // --- 4.9 ARMAZENAMENTO E TRANSPORTE DO ALIMENTO PREPARADO (a cada operação -> diário) ---
-  { id: 'tran_01', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.1', texto: 'Os alimentos preparados que aguardam transporte estão identificados (produto, data de preparo, validade) e protegidos.', perfis: MOVEIS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'tran_02', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.2', texto: 'O transporte ocorre em tempo e temperatura que preservam a qualidade, com a temperatura monitorada.', perfis: MOVEIS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'tran_03', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.3', texto: 'O meio de transporte é higienizado, coberto e não leva cargas que comprometam o alimento.', perfis: MOVEIS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'tran_01', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.1', texto: 'Os alimentos preparados que aguardam transporte estão identificados (produto, data de preparo, validade) e protegidos.', perfis: MOVEIS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
+  { id: 'tran_02', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.2', texto: 'O transporte ocorre em tempo e temperatura que preservam a qualidade, com a temperatura monitorada.', perfis: MOVEIS, frequencia: 'diario', momento: 'abertura', critico: true, peso: 2 },
+  { id: 'tran_03', categoriaId: 'armazenamento_transporte', codigoRdc: '4.9.3', texto: 'O meio de transporte é higienizado, coberto e não leva cargas que comprometam o alimento.', perfis: MOVEIS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
 
   // --- 4.10 EXPOSIÇÃO AO CONSUMO DO ALIMENTO PREPARADO ---
-  { id: 'expo_01', categoriaId: 'exposicao', codigoRdc: '4.10.1', texto: 'As áreas de exposição e o refeitório estão organizados e em boas condições higiênico-sanitárias.', perfis: FIXOS, frequencia: 'diario', critico: false, peso: 1 },
-  { id: 'expo_02', categoriaId: 'exposicao', codigoRdc: '4.10.2', texto: 'Ao servir, os manipuladores higienizam as mãos e usam utensílios ou luvas descartáveis.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
-  { id: 'expo_03', categoriaId: 'exposicao', codigoRdc: '4.10.3', texto: 'Os equipamentos de exposição a quente/frio estão conservados e com a temperatura monitorada regularmente.', perfis: TODOS, frequencia: 'diario', critico: true, peso: 2 },
+  { id: 'expo_01', categoriaId: 'exposicao', codigoRdc: '4.10.1', texto: 'As áreas de exposição e o refeitório estão organizados e em boas condições higiênico-sanitárias.', perfis: FIXOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
+  { id: 'expo_02', categoriaId: 'exposicao', codigoRdc: '4.10.2', texto: 'Ao servir, os manipuladores higienizam as mãos e usam utensílios ou luvas descartáveis.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
+  { id: 'expo_03', categoriaId: 'exposicao', codigoRdc: '4.10.3', texto: 'Os equipamentos de exposição a quente/frio estão conservados e com a temperatura monitorada regularmente.', perfis: TODOS, frequencia: 'diario', momento: 'servico', critico: true, peso: 2 },
   { id: 'expo_04', categoriaId: 'exposicao', codigoRdc: '4.10.4', texto: 'O balcão de exposição tem barreiras de proteção que evitam a contaminação pelo consumidor.', perfis: TODOS, frequencia: 'periodico', critico: false, peso: 1 },
-  { id: 'expo_05', categoriaId: 'exposicao', codigoRdc: '4.10.5', texto: 'Os utensílios de consumo (pratos, copos, talheres) são descartáveis ou devidamente higienizados e guardados protegidos.', perfis: TODOS, frequencia: 'diario', critico: false, peso: 1 },
+  { id: 'expo_05', categoriaId: 'exposicao', codigoRdc: '4.10.5', texto: 'Os utensílios de consumo (pratos, copos, talheres) são descartáveis ou devidamente higienizados e guardados protegidos.', perfis: TODOS, frequencia: 'diario', momento: 'abertura', critico: false, peso: 1 },
   { id: 'expo_06', categoriaId: 'exposicao', codigoRdc: '4.10.6', texto: 'Ornamentos e plantas na área de consumo não são fonte de contaminação para os alimentos.', perfis: FIXOS, frequencia: 'periodico', critico: false, peso: 1 },
   { id: 'expo_07', categoriaId: 'exposicao', codigoRdc: '4.10.7', texto: 'A área de recebimento de dinheiro é reservada e quem recebe pagamento não manipula alimentos.', perfis: FIXOS, frequencia: 'periodico', critico: false, peso: 1 },
 
@@ -267,6 +286,13 @@ export function itensDiarios(perfil: PerfilId): ItemChecklist[] {
 export function itensDiariosEssenciais(perfil: PerfilId): ItemChecklist[] {
   return itensDiarios(perfil).filter((i) => i.critico);
 }
+
+/** Ordem dos momentos do dia — usada para exibir a diária na ordem do expediente. */
+export const ORDEM_MOMENTO: Record<MomentoDia, number> = {
+  abertura: 0,
+  servico: 1,
+  fechamento: 2,
+};
 
 /** Itens de frequência legal fixa (água/reservatório), com seu próprio relógio de 180 dias. */
 export function itensSemestrais(perfil: PerfilId): ItemChecklist[] {

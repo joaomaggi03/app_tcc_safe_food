@@ -10,8 +10,13 @@
  * Se ainda não houver cadastro, redireciona para /cadastro: é o
  * "primeiro acesso" que o RF02 pede.
  *
- * O status das trilhas de periodicidade e o último score entram aqui
- * nas Fases 5 e 4.
+ * O painel de conformidade (Fase 4) são QUATRO linhas, e não uma média
+ * só. O motivo está em `painelInicio()`, no db/consultas.ts: num mês
+ * típico há ~26 diárias contra UMA auditoria periódica, então qualquer
+ * média entre elas seria dominada pelas diárias e esconderia justamente
+ * a auditoria, que cobre a maior parte da norma.
+ *
+ * O status de vencimento de cada trilha entra aqui na Fase 5.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -21,12 +26,29 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarCatalogo,
   listarPerfis,
+  painelInicio,
   resumoDoPerfil,
   type Estabelecimento,
+  type PainelInicio,
+  type ResumoInspecao,
 } from '../db/consultas';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-import { formatarData } from '../theme/rotulos';
+import {
+  faixaDoScore,
+  formatarData,
+  ROTULO_MODO,
+  textoScore,
+  type FaixaScore,
+} from '../theme/rotulos';
+
+/** Cor do número de cada faixa do score (ver theme/rotulos.ts). */
+const COR_FAIXA: Record<FaixaScore, string> = {
+  bom: Cores.primariaTexto,
+  atencao: Cores.texto,
+  ruim: Cores.acentoTexto,
+  sem_dados: Cores.textoSuave,
+};
 
 export default function TelaInicio() {
   const estabelecimento = useEstabelecimento((estado) => estado.atual);
@@ -56,10 +78,12 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   const [resumo, setResumo] = useState(() =>
     resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id),
   );
+  const [painel, setPainel] = useState<PainelInicio | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       setResumo(resumoDoPerfil(estabelecimento.perfil_id, estabelecimento.id));
+      setPainel(painelInicio(estabelecimento.id));
     }, [estabelecimento.perfil_id, estabelecimento.id]),
   );
   const catalogo = useMemo(() => contarCatalogo(), []);
@@ -105,6 +129,9 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         </Text>
       </View>
 
+      {/* --- Conformidade (RF04) --- */}
+      {painel ? <PainelConformidade painel={painel} router={router} /> : null}
+
       {/* --- Resumo do checklist --- */}
       <Cartao
         titulo="Seu checklist"
@@ -117,9 +144,8 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
       {/* --- O que ainda não existe --- */}
       <Cartao titulo="Próximas etapas" nota="O que este painel ainda vai mostrar.">
-        <Text style={estilos.pendente}>• Score de conformidade (Fase 4)</Text>
         <Text style={estilos.pendente}>
-          • Status das trilhas diária, periódica e semestral (Fase 5)
+          • Vencimento de cada trilha e alertas antes do prazo (Fase 5)
         </Text>
       </Cartao>
 
@@ -127,6 +153,167 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         Base offline: {catalogo.itens} itens da RDC 216 em {catalogo.categorias} categorias.
       </Text>
     </ScrollView>
+  );
+}
+
+/**
+ * As quatro leituras de conformidade.
+ *
+ * Cada linha responde uma pergunta diferente: como comecei hoje, como
+ * tenho sido no mês, como estou estruturalmente, e se a água está em
+ * dia. Elas NÃO se fundem num número só — ver o comentário de
+ * `painelInicio()` no db/consultas.ts.
+ */
+function PainelConformidade({
+  painel,
+  router,
+}: {
+  painel: PainelInicio;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const { hoje, rotinaMes, auditoria, agua } = painel;
+
+  return (
+    <View style={estilos.cartao}>
+      <Text style={estilos.tituloCartao}>Conformidade</Text>
+      <View style={estilos.divisor} />
+
+      {/* 1. Hoje */}
+      {hoje ? (
+        <LinhaScore
+          rotulo="Diária de hoje"
+          valor={hoje.score.valor}
+          detalhe={detalheDaInspecao(hoje)}
+          aoTocar={() => router.push(`/resultado?id=${hoje.id}`)}
+        />
+      ) : (
+        <LinhaPendente
+          rotulo="Diária de hoje"
+          detalhe={
+            painel.hojeEmAndamento
+              ? 'Em andamento — conclua no fim do expediente'
+              : 'Ainda não foi feita'
+          }
+          aoTocar={() => router.push('/nova-inspecao')}
+        />
+      )}
+
+      {/* 2. Rotina do mês */}
+      <LinhaScore
+        rotulo="Rotina do mês"
+        valor={rotinaMes.media}
+        detalhe={`${rotinaMes.diasComDiaria} de ${rotinaMes.janelaDias} dias com inspeção`}
+      />
+
+      {/* 3. Auditoria periódica */}
+      {auditoria ? (
+        <LinhaScore
+          rotulo="Auditoria periódica"
+          valor={auditoria.score.valor}
+          detalhe={detalheDaInspecao(auditoria)}
+          aoTocar={() => router.push(`/resultado?id=${auditoria.id}`)}
+        />
+      ) : (
+        <LinhaPendente
+          rotulo="Auditoria periódica"
+          detalhe="Nenhuma auditoria concluída"
+          aoTocar={() => router.push('/nova-inspecao')}
+        />
+      )}
+
+      {/* 4. Água: confirmação, não nota — são 1 ou 2 itens. */}
+      {agua ? (
+        <View style={estilos.linha}>
+          <View style={estilos.flex}>
+            <Text style={estilos.rotulo}>Água (semestral)</Text>
+            <Text style={estilos.subtexto}>
+              {agua.diaLocal ? `Verificada em ${formatarData(agua.diaLocal)}` : 'Verificada'}
+            </Text>
+          </View>
+          <Ionicons
+            name={
+              agua.adequados === agua.avaliados ? 'checkmark-circle' : 'alert-circle'
+            }
+            size={22}
+            color={agua.adequados === agua.avaliados ? Cores.primaria : Cores.acento}
+          />
+        </View>
+      ) : (
+        <LinhaPendente
+          rotulo="Água (semestral)"
+          detalhe="Laudo e reservatório ainda não verificados"
+          aoTocar={() => router.push('/nova-inspecao')}
+        />
+      )}
+    </View>
+  );
+}
+
+/** "12 críticos ok · Completa" — o contexto que o número sozinho não dá. */
+function detalheDaInspecao(inspecao: ResumoInspecao): string {
+  const partes: string[] = [];
+
+  if (inspecao.dia_local) partes.push(formatarData(inspecao.dia_local));
+  if (inspecao.trilha === 'diario') partes.push(ROTULO_MODO[inspecao.modo]);
+  if (inspecao.score.criticosAvaliados > 0) {
+    partes.push(
+      `críticos ${inspecao.score.criticosAdequados}/${inspecao.score.criticosAvaliados}`,
+    );
+  }
+
+  return partes.join(' · ');
+}
+
+function LinhaScore({
+  rotulo,
+  valor,
+  detalhe,
+  aoTocar,
+}: {
+  rotulo: string;
+  valor: number | null;
+  detalhe: string;
+  aoTocar?: () => void;
+}) {
+  const cor = COR_FAIXA[faixaDoScore(valor)];
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.linha, pressed && aoTocar ? estilos.pressionado : null]}
+      onPress={aoTocar}
+      disabled={!aoTocar}
+      accessibilityRole={aoTocar ? 'button' : undefined}
+    >
+      <View style={estilos.flex}>
+        <Text style={estilos.rotulo}>{rotulo}</Text>
+        <Text style={estilos.subtexto}>{detalhe}</Text>
+      </View>
+      <Text style={[estilos.scoreValor, { color: cor }]}>{textoScore(valor)}</Text>
+    </Pressable>
+  );
+}
+
+function LinhaPendente({
+  rotulo,
+  detalhe,
+  aoTocar,
+}: {
+  rotulo: string;
+  detalhe: string;
+  aoTocar: () => void;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.linha, pressed && estilos.pressionado]}
+      onPress={aoTocar}
+      accessibilityRole="button"
+    >
+      <View style={estilos.flex}>
+        <Text style={estilos.rotulo}>{rotulo}</Text>
+        <Text style={estilos.subtexto}>{detalhe}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
+    </Pressable>
   );
 }
 
@@ -207,6 +394,8 @@ const estilos = StyleSheet.create({
   botaoEditarTexto: { fontSize: 13, fontWeight: '700', color: Cores.sobrePrimaria },
   pressionado: { opacity: 0.8 },
 
+  subtexto: { fontSize: 12, color: Cores.textoSuave, marginTop: 2 },
+  scoreValor: { fontSize: 22, fontWeight: '700' },
   detalhes: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 12 },
   detalhe: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   detalheTexto: { fontSize: 13, color: Cores.textoSecundario },

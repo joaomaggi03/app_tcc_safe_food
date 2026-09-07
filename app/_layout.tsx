@@ -105,6 +105,12 @@ export default function LayoutRaiz() {
           name="inspecao"
           options={{ href: null, title: 'Inspeção' }}
         />
+
+        {/* O resultado da inspeção (Fase 4), aberto ao concluir. */}
+        <Tabs.Screen
+          name="resultado"
+          options={{ href: null, title: 'Resultado' }}
+        />
       </Tabs>
     </>
   );

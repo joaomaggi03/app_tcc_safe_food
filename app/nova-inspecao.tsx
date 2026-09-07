@@ -22,12 +22,15 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarItensPorTrilha,
+  contarVerificacoesDaRotina,
+  diaLocalISO,
   listarInspecoes,
   listarItensOcultos,
   reexibirItem,
   TRILHAS,
   type Estabelecimento,
   type ItemOculto,
+  type ModoInspecao,
   type ResumoInspecao,
   type Trilha,
 } from '../db/consultas';
@@ -56,6 +59,8 @@ export default function TelaNovaInspecao() {
 
 interface Dados {
   contagem: Record<Trilha, number>;
+  /** Quantas verificações a rotina guiada tem — o tamanho do modo Rotina. */
+  verificacoesRotina: number;
   emAndamento: Partial<Record<Trilha, ResumoInspecao>>;
   ocultos: ItemOculto[];
 }
@@ -65,17 +70,27 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   const [dados, setDados] = useState<Dados | null>(null);
 
   const recarregar = useCallback(() => {
+    const hoje = diaLocalISO();
     const emAndamento: Partial<Record<Trilha, ResumoInspecao>> = {};
+
     for (const inspecao of listarInspecoes(estabelecimento.id)) {
+      if (inspecao.status !== 'em_andamento' || emAndamento[inspecao.trilha]) continue;
+
+      // A diária é presa ao dia: uma deixada aberta ontem não conta como
+      // "em andamento" hoje — abrir a trilha começa uma inspeção nova.
+      if (inspecao.trilha === 'diario' && inspecao.dia_local !== hoje) continue;
+
       // A lista vem da mais recente para a mais antiga, então a primeira
-      // em andamento de cada trilha é a que deve ser retomada.
-      if (inspecao.status === 'em_andamento' && !emAndamento[inspecao.trilha]) {
-        emAndamento[inspecao.trilha] = inspecao;
-      }
+      // em andamento de cada trilha é a que será retomada.
+      emAndamento[inspecao.trilha] = inspecao;
     }
 
     setDados({
       contagem: contarItensPorTrilha(estabelecimento.perfil_id, estabelecimento.id),
+      verificacoesRotina: contarVerificacoesDaRotina(
+        estabelecimento.perfil_id,
+        estabelecimento.id,
+      ),
       emAndamento,
       ocultos: listarItensOcultos(estabelecimento.id),
     });
@@ -115,7 +130,8 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           trilha={trilha}
           quantidade={dados.contagem[trilha]}
           emAndamento={dados.emAndamento[trilha]}
-          aoAbrir={() => router.push(`/inspecao?trilha=${trilha}`)}
+          verificacoes={dados.verificacoesRotina}
+          aoAbrir={(modo) => router.push(`/inspecao?trilha=${trilha}&modo=${modo}`)}
         />
       ))}
 
@@ -142,37 +158,42 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   );
 }
 
+/**
+ * O cartão de uma trilha.
+ *
+ * A diária é a única que oferece DOIS botões, porque é a única que se
+ * repete todo dia. No modo Rotina, os mesmos itens da norma são
+ * apresentados como verificações agrupadas, em linguagem operacional —
+ * responder 11 perguntas é viável numa cozinha em operação; percorrer
+ * 32 enunciados da RDC, não. O modo Completo continua ali para quem
+ * quiser conferir exigência por exigência.
+ */
 function CartaoTrilha({
   trilha,
   quantidade,
+  verificacoes,
   emAndamento,
   aoAbrir,
 }: {
   trilha: Trilha;
   quantidade: number;
+  verificacoes: number;
   emAndamento: ResumoInspecao | undefined;
-  aoAbrir: () => void;
+  aoAbrir: (modo: ModoInspecao) => void;
 }) {
   const vazia = quantidade === 0;
+  const doisModos = trilha === 'diario' && verificacoes > 0;
 
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        estilos.cartao,
-        emAndamento && estilos.cartaoEmAndamento,
-        pressed && estilos.cartaoPressionado,
-        vazia && estilos.cartaoDesabilitado,
-      ]}
-      onPress={aoAbrir}
-      disabled={vazia}
-      accessibilityRole="button"
-    >
+  const corpo = (
+    <>
       <View style={estilos.cartaoTopo}>
         <Text style={estilos.cartaoTitulo}>{ROTULO_TRILHA[trilha]}</Text>
         <View style={estilos.contador}>
           <Text style={estilos.contadorTexto}>{quantidade}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
+        {doisModos ? null : (
+          <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
+        )}
       </View>
 
       <Text style={estilos.cartaoDescricao}>{DESCRICAO_TRILHA[trilha]}</Text>
@@ -186,6 +207,59 @@ function CartaoTrilha({
           </Text>
         </View>
       ) : null}
+    </>
+  );
+
+  // Com dois modos o cartão inteiro não pode ser clicável: cada botão
+  // leva a um recorte diferente do mesmo checklist.
+  if (doisModos) {
+    return (
+      <View style={[estilos.cartao, emAndamento ? estilos.cartaoEmAndamento : null]}>
+        {corpo}
+
+        <View style={estilos.modos}>
+          <Pressable
+            style={({ pressed }) => [
+              estilos.botaoModo,
+              estilos.botaoModoPrincipal,
+              pressed && estilos.pressionado,
+            ]}
+            onPress={() => aoAbrir('rotina')}
+            accessibilityRole="button"
+          >
+            <Text style={estilos.botaoModoPrincipalTexto}>Rotina · {verificacoes}</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [estilos.botaoModo, pressed && estilos.pressionado]}
+            onPress={() => aoAbrir('completa')}
+            accessibilityRole="button"
+          >
+            <Text style={estilos.botaoModoTexto}>Completa · {quantidade}</Text>
+          </Pressable>
+        </View>
+
+        <Text style={estilos.notaModo}>
+          A rotina reúne as {quantidade} exigências diárias em {verificacoes} verificações, na
+          ordem do expediente e com os artigos da RDC citados em cada uma.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        estilos.cartao,
+        emAndamento && estilos.cartaoEmAndamento,
+        pressed && estilos.cartaoPressionado,
+        vazia && estilos.cartaoDesabilitado,
+      ]}
+      onPress={() => aoAbrir('completa')}
+      disabled={vazia}
+      accessibilityRole="button"
+    >
+      {corpo}
     </Pressable>
   );
 }
@@ -298,6 +372,22 @@ const estilos = StyleSheet.create({
     marginTop: 12,
   },
   faixaAndamentoTexto: { flex: 1, fontSize: 12, color: Cores.sobrePrimaria },
+
+  modos: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  botaoModo: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+    backgroundColor: Cores.fundo,
+  },
+  botaoModoPrincipal: { backgroundColor: Cores.primaria, borderColor: Cores.primaria },
+  botaoModoPrincipalTexto: { fontSize: 14, fontWeight: '700', color: Cores.sobrePrimaria },
+  botaoModoTexto: { fontSize: 14, fontWeight: '600', color: Cores.textoSecundario },
+  pressionado: { opacity: 0.75 },
+  notaModo: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 10 },
 
   ocultos: {
     marginTop: 14,
