@@ -108,11 +108,6 @@ export function obterEstabelecimento(): Estabelecimento | null {
   );
 }
 
-/** Data de hoje no formato 'AAAA-MM-DD' usado pelo banco. */
-export function hojeISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /**
  * Agora, como timestamp ISO completo ('2026-09-05T14:03:21.000Z').
  * Usado nas inspeções e respostas, onde a hora importa para ordenar
@@ -143,7 +138,10 @@ function ouNulo(texto: string | undefined): string | null {
  * Duas regras que valem entender:
  *  - `data_cadastro` é gravada uma vez e nunca muda. A Fase 5 usa essa
  *    data como base do primeiro vencimento das trilhas; se ela se movesse
- *    a cada edição, o prazo se renovaria sozinho.
+ *    a cada edição, o prazo se renovaria sozinho. E ela é o DIA LOCAL:
+ *    gravar a data em UTC faria quem cadastra depois das 21h no Brasil
+ *    receber a data de amanhã, empurrando o primeiro vencimento das três
+ *    trilhas um dia à frente.
  *  - `periodicidade_auditoria_dias` é copiada do perfil na CRIAÇÃO e
  *    preservada na edição, porque na Fase 5 o usuário poderá ajustá-la à
  *    mão e não queremos desfazer esse ajuste.
@@ -179,7 +177,7 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
        VALUES (?, ?, ?, ?, ?, ?)`,
       dados.nome.trim(),
       dados.perfilId,
-      hojeISO(),
+      diaLocalISO(),
       perfil.periodicidade_auditoria_dias,
       ouNulo(dados.cidade),
       ouNulo(dados.responsavel),
