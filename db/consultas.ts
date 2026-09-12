@@ -435,6 +435,9 @@ export function checklistDoPerfil(
 export interface VerificacaoChecklist {
   id: string;
   titulo: string;
+  /** O resumo em tópicos, que é o que aparece no cartão. */
+  topicos: string[];
+  /** O enunciado completo — mostrado só quando o usuário pede. */
   texto: string;
   /** Os itens da RDC cobertos, já filtrados por perfil e por RF09. */
   itens: ItemChecklist[];
@@ -505,6 +508,7 @@ export function rotinaDoPerfil(
     grupo.verificacoes.push({
       id: verificacao.id,
       titulo: verificacao.titulo,
+      topicos: verificacao.topicos,
       texto: verificacao.texto,
       itens,
       codigos: itens.map((item) => item.codigo_rdc),

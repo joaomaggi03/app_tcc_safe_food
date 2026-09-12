@@ -780,6 +780,10 @@ function CartaoVerificacao({
   aoResponder: (resposta: Resposta) => void;
   aoDetalhar: (abrir?: boolean) => void;
 }) {
+  // Igual aos itens: cada cartão lembra sozinho se está com o enunciado
+  // completo aberto, para abrir um não redesenhar a lista inteira.
+  const [descricaoAberta, setDescricaoAberta] = useState(false);
+
   return (
     <View style={[estilos.item, estiloDaVerificacao[estado]]}>
       <View style={estilos.itemTopo}>
@@ -792,7 +796,34 @@ function CartaoVerificacao({
         ) : null}
       </View>
 
-      <Text style={estilos.textoItem}>{verificacao.texto}</Text>
+      {/* O RESUMO é o que se lê no dia a dia; o enunciado técnico fica
+          a um toque, para quem precisar do detalhe. */}
+      <View style={estilos.topicos}>
+        {verificacao.topicos.map((topico) => (
+          <View key={topico} style={estilos.topico}>
+            <Text style={estilos.marcador}>•</Text>
+            <Text style={estilos.topicoTexto}>{topico}</Text>
+          </View>
+        ))}
+      </View>
+
+      <Pressable
+        onPress={() => setDescricaoAberta((aberta) => !aberta)}
+        style={({ pressed }) => [estilos.verNorma, pressed && estilos.pressionado]}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: descricaoAberta }}
+      >
+        <Ionicons
+          name={descricaoAberta ? 'chevron-up' : 'document-text-outline'}
+          size={14}
+          color={Cores.textoSecundario}
+        />
+        <Text style={estilos.verNormaTexto}>
+          {descricaoAberta ? 'Ocultar descrição completa' : 'Ver descrição completa'}
+        </Text>
+      </Pressable>
+
+      {descricaoAberta ? <Text style={estilos.textoNorma}>{verificacao.texto}</Text> : null}
 
       {/* A rastreabilidade até a norma: quais exigências esta pergunta
           cobre. Sem isso, o agrupamento viraria uma caixa-preta. */}

@@ -44,7 +44,16 @@ export interface VerificacaoRotina {
   momento: MomentoDia;
   /** Nome curto, para o cabeçalho do cartão. */
   titulo: string;
-  /** O enunciado da verificação, em linguagem técnica e operacional. */
+  /**
+   * RESUMO em tópicos — o que aparece no cartão.
+   *
+   * Mesma razão dos tópicos dos itens: o enunciado técnico completo tem
+   * quatro a seis linhas no celular, e quem está com a cozinha rodando
+   * lê o suficiente para decidir. O texto integral continua no `texto`,
+   * a um toque.
+   */
+  topicos: string[];
+  /** O enunciado completo, em linguagem técnica e operacional. */
   texto: string;
   /** IDs dos itens de `ITENS` (data/rdc216.ts) cobertos por ela. */
   itens: string[];
@@ -58,6 +67,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_manipuladores',
     momento: 'abertura',
     titulo: 'Higiene e saúde dos manipuladores',
+    topicos: [
+      'Uniforme limpo e trocado todo dia',
+      'Cabelo protegido, unhas curtas, sem adornos',
+      'Quem tem lesão ou sintoma fica afastado',
+    ],
     texto:
       'Uniformes limpos e trocados diariamente, cabelos protegidos, unhas curtas e sem ' +
       'esmalte, ausência de adornos e maquiagem; manipuladores com lesões ou sintomas de ' +
@@ -68,6 +82,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_materias_primas',
     momento: 'abertura',
     titulo: 'Matérias-primas e armazenamento',
+    topicos: [
+      'Ingredientes em boas condições',
+      'Tudo identificado com data e validade',
+      'Geladeira e freezer na temperatura certa',
+    ],
     texto:
       'Matérias-primas e ingredientes em condições higiênico-sanitárias adequadas; produtos ' +
       'armazenados identificados com designação, data de preparo e prazo de validade, sob ' +
@@ -78,6 +97,10 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_area_consumo',
     momento: 'abertura',
     titulo: 'Área de consumo e utensílios',
+    topicos: [
+      'Exposição e refeitório limpos e organizados',
+      'Pratos e talheres higienizados e protegidos',
+    ],
     texto:
       'Áreas de exposição e refeitório organizadas e em boas condições higiênico-sanitárias; ' +
       'utensílios de consumo descartáveis ou devidamente higienizados e guardados protegidos ' +
@@ -91,6 +114,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_transporte',
     momento: 'abertura',
     titulo: 'Transporte do alimento preparado',
+    topicos: [
+      'Alimento identificado e protegido',
+      'Veículo limpo e coberto',
+      'Temperatura mantida no trajeto',
+    ],
     texto:
       'Alimentos destinados ao transporte identificados com produto, data de preparo e prazo ' +
       'de validade, e devidamente protegidos; meio de transporte higienizado, coberto e sem ' +
@@ -105,6 +133,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_maos_conduta',
     momento: 'servico',
     titulo: 'Higienização das mãos e conduta',
+    topicos: [
+      'Mãos lavadas ao chegar e ao trocar de tarefa',
+      'Sempre após usar o sanitário',
+      'Sem fumar, comer ou pegar dinheiro',
+    ],
     texto:
       'Lavagem e antissepsia das mãos ao iniciar a manipulação, a cada troca de atividade e ' +
       'após o uso do sanitário; ausência de fumo, alimentação e manuseio de dinheiro durante ' +
@@ -115,6 +148,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_contaminacao_cruzada',
     momento: 'servico',
     titulo: 'Prevenção de contaminação cruzada',
+    topicos: [
+      'Cru, semipreparado e pronto separados',
+      'Mãos higienizadas ao passar de um para o outro',
+      'Alimento consumido cru foi higienizado',
+    ],
     texto:
       'Separação entre alimentos crus, semipreparados e prontos, com utensílios e superfícies ' +
       'distintos; higienização das mãos na transição entre eles; alimentos consumidos crus ' +
@@ -125,6 +163,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_tratamento_termico',
     momento: 'servico',
     titulo: 'Tratamento térmico e fritura',
+    topicos: [
+      '70 °C no centro do alimento',
+      'Conferir por cor, textura e temperatura',
+      'Óleo até 180 °C, trocado ao alterar',
+    ],
     texto:
       'Cocção atingindo no mínimo 70 °C em todas as partes do alimento, ou combinação de ' +
       'tempo e temperatura equivalente, com verificação por temperatura, cor e textura; óleos ' +
@@ -136,6 +179,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_descongelamento',
     momento: 'servico',
     titulo: 'Descongelamento',
+    topicos: [
+      'Sob refrigeração, abaixo de 5 °C',
+      'Ou micro-ondas com cocção imediata',
+      'Nunca recongelar',
+    ],
     texto:
       'Descongelamento conduzido sob refrigeração abaixo de 5 °C ou em forno de micro-ondas ' +
       'com cocção imediata, nunca à temperatura ambiente; alimentos congelados descongelados ' +
@@ -147,6 +195,11 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_tempo_temperatura',
     momento: 'servico',
     titulo: 'Espera, conservação a quente e resfriamento',
+    topicos: [
+      'Perecível fora da geladeira só o mínimo',
+      'Quente acima de 60 °C por até 6 h',
+      'De 60 °C a 10 °C em até 2 h',
+    ],
     texto:
       'Alimentos perecíveis mantidos à temperatura ambiente somente pelo tempo mínimo ' +
       'necessário ao preparo; conservação a quente acima de 60 °C por no máximo 6 horas; ' +
@@ -158,6 +211,10 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_sobras_embalagens',
     momento: 'servico',
     titulo: 'Sobras e embalagens',
+    topicos: [
+      'Sobras identificadas com data e validade',
+      'Embalagem limpa antes de abrir',
+    ],
     texto:
       'Sobras de matérias-primas acondicionadas e identificadas com produto, data de ' +
       'fracionamento e prazo de validade após a abertura; embalagens higienizadas antes de ' +
@@ -168,6 +225,10 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_exposicao',
     momento: 'servico',
     titulo: 'Exposição ao consumo',
+    topicos: [
+      'Servir com utensílio ou luva descartável',
+      'Balcão quente e frio na temperatura certa',
+    ],
     texto:
       'Higienização das mãos e uso de utensílios ou luvas descartáveis ao porcionar e servir; ' +
       'equipamentos de exposição a quente e a frio conservados e com temperatura monitorada ' +
@@ -182,6 +243,10 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     id: 'rot_fechamento',
     momento: 'fechamento',
     titulo: 'Higienização final e resíduos',
+    topicos: [
+      'Área de preparo higienizada ao fechar',
+      'Lixo retirado para local fechado',
+    ],
     texto:
       'Higienização da área de preparo ao término do trabalho, sem uso de odorizantes nas ' +
       'áreas de alimentos; resíduos coletados e estocados em local fechado, isolado das áreas ' +
