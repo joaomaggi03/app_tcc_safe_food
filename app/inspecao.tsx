@@ -1113,7 +1113,7 @@ const estilos = StyleSheet.create({
     // A sombra é o que faz o cartão parecer POR CIMA da lista, e não
     // parte dela.
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: Cores.sombra,
     shadowOpacity: 0.1,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },

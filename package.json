@@ -26,7 +26,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/datas.ts db/vencimento.ts db/schema.ts db/seed.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "private": true
 }

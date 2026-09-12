@@ -98,6 +98,9 @@ export const Cores = {
   textoSuave: cinza[400],        // legendas, rótulos discretos
   textoInvertido: branco,
 
+  /** Cor da sombra dos elementos que flutuam sobre o conteúdo. */
+  sombra: cinza[700],
+
   // Navegação
   abaAtiva: verde[400],
   abaInativa: cinza[400],
