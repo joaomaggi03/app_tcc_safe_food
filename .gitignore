@@ -42,3 +42,6 @@ yarn-error.*
 
 # Saída da compilação usada pelos testes
 tests/.compilado/
+
+# O canvas montado é gerado a partir dos .dc.html + canvas.json.
+docs/mockup/fluxo-tres-abas.html

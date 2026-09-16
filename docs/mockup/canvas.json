@@ -1,0 +1,39 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Hoje" },
+    { "file": "Sheet.dc.html", "x": 490, "y": 0, "w": 390, "h": 844, "title": "Nova inspeção (sheet)" },
+    { "file": "Conformidade.dc.html", "x": 980, "y": 0, "w": 390, "h": 844 },
+    { "file": "Estabelecimento.dc.html", "x": 1470, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    {
+      "id": "note-hoje",
+      "x": 0,
+      "y": -230,
+      "w": 390,
+      "text": "HOJE — a aba não aponta para a diária, ela É a diária.\n\nAbre direto nas verificações, com o bloco do momento atual expandido (item.momento já existe no banco). Zero toques para a ação mais frequente, contra os 3 de hoje.\n\nTrilha em dia não ocupa linha: só a auditoria vencida aparece, em acento. Silêncio = está tudo certo.\n\nO \"+\" no header abre o sheet ao lado."
+    },
+    {
+      "id": "note-sheet",
+      "x": 490,
+      "y": -230,
+      "w": 390,
+      "text": "NOVA INSPEÇÃO — o que hoje é aba vira sheet.\n\nMesmo conteúdo de nova-inspecao.tsx: as três trilhas com contagem, selo de vencimento e os dois modos da diária. Só deixa de ser destino fixo e vira ação — href: null + presentation: modal no _layout.\n\nEstado retratado: DIA NÃO INICIADO. É quando o modo da diária ainda pode ser escolhido; depois de aberta, inspecao.modo está gravado, o cartão vira \"Retomar\" e os dois botões somem.\n\nPeriódica e semestral não têm botão: o cartão inteiro é o toque, como já é hoje."
+    },
+    {
+      "id": "note-conformidade",
+      "x": 980,
+      "y": -230,
+      "w": 390,
+      "text": "CONFORMIDADE — absorve o Histórico.\n\nAs quatro leituras continuam sem média entre si. Abaixo, auditorias e diárias em listas SEPARADAS: numa lista corrida, ~26 diárias por mês afogam a única auditoria — o mesmo motivo pelo qual você já não faz a média."
+    },
+    {
+      "id": "note-estabelecimento",
+      "x": 1470,
+      "y": -230,
+      "w": 390,
+      "text": "ESTABELECIMENTO — junta o que hoje está solto.\n\nCadastro (atrás de um botão pequeno no canto), periodicidade da auditoria, itens ocultos do RF09 (hoje no rodapé de Nova Inspeção) e o \"Testar alerta agora\", que é andaime de demonstração e saiu da tela principal."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -5,14 +5,23 @@
  * define o "esqueleto" de navegação que envolve as telas irmãs.
  *
  * Aqui usamos <Tabs>, que cria a barra de abas de baixo.
- * Cada <Tabs.Screen name="X" /> aponta para o arquivo app/X.tsx:
+ * Cada <Tabs.Screen name="X" /> aponta para o arquivo app/X.tsx.
  *
- *   name="index"          -> app/index.tsx          (Início)
- *   name="nova-inspecao"  -> app/nova-inspecao.tsx  (Nova Inspeção)
- *   name="historico"      -> app/historico.tsx      (Histórico)
+ * AS TRÊS ABAS SÃO TRÊS PERGUNTAS, não três objetos:
  *
- * Ou seja: a navegação vem da estrutura de arquivos, não de uma
- * configuração central. Criar um arquivo em app/ cria uma rota.
+ *   index            -> Hoje            "o que eu faço agora?"
+ *   conformidade     -> Conformidade    "como estou?"
+ *   estabelecimento  -> Estabelecimento "como o app está configurado?"
+ *
+ * O desenho anterior (Início, Nova Inspeção, Histórico) tinha dois
+ * problemas que este resolve: o Início listava as três trilhas e cada
+ * linha levava a Nova Inspeção, que listava as três trilhas de novo; e
+ * a rotina diária, que se usa várias vezes por dia, ficava a três
+ * toques — a mesma distância da auditoria, que roda uma vez por mês.
+ *
+ * Nova Inspeção continua existindo como ROTA (`href: null`), aberta
+ * pelo "+" da aba Hoje. Deixou de ser destino fixo porque não é um
+ * lugar: é uma ação, e das raras.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -39,12 +48,16 @@ export default function LayoutRaiz() {
    * o estabelecimento muda.
    *
    * Aqui, e não numa tela, porque o agendamento não pertence a nenhuma
-   * tela: ele tem que acontecer mesmo que o usuário abra o app direto no
-   * Histórico. E é reagendamento completo — cancela tudo e recria — para
-   * não existir uma segunda verdade sobre o que está agendado.
+   * tela: ele tem que acontecer mesmo que o usuário abra o app direto na
+   * Conformidade. E é reagendamento completo — cancela tudo e recria —
+   * para não existir uma segunda verdade sobre o que está agendado.
    *
    * A promessa é deliberadamente ignorada: se a permissão for negada, o
    * app segue inteiro, só sem alerta. Nada aqui pode travar a abertura.
+   *
+   * Depende do estabelecimento INTEIRO, e não só do id, porque mudar a
+   * periodicidade da auditoria (aba Estabelecimento) muda o vencimento —
+   * e o alerta agendado precisa acompanhar.
    */
   useEffect(() => {
     if (!estabelecimento) return;
@@ -77,48 +90,55 @@ export default function LayoutRaiz() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Início',
+            title: 'Hoje',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" color={color} size={size} />
+              <Ionicons name="today-outline" color={color} size={size} />
             ),
           }}
         />
 
         <Tabs.Screen
-          name="nova-inspecao"
+          name="conformidade"
           options={{
-            title: 'Nova Inspeção',
+            title: 'Conformidade',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="clipboard-outline" color={color} size={size} />
+              <Ionicons name="stats-chart-outline" color={color} size={size} />
             ),
           }}
         />
 
         <Tabs.Screen
-          name="historico"
+          name="estabelecimento"
           options={{
-            title: 'Histórico',
+            title: 'Estabelecimento',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="time-outline" color={color} size={size} />
+              <Ionicons name="storefront-outline" color={color} size={size} />
             ),
           }}
         />
 
         {/*
-          A tela de cadastro é uma rota normal (app/cadastro.tsx), mas
-          `href: null` a esconde da barra de abas: ela não é um destino
-          fixo, e sim algo que se abre no primeiro acesso ou ao editar.
+          Daqui para baixo, rotas que NÃO são abas (`href: null`): elas
+          se abrem por cima do conteúdo, a partir de um toque, e não são
+          destinos fixos.
         */}
+
+        {/* A folha das três trilhas, aberta pelo "+" da aba Hoje. */}
+        <Tabs.Screen
+          name="nova-inspecao"
+          options={{ href: null, title: 'Nova inspeção' }}
+        />
+
+        {/* O cadastro: primeiro acesso, ou edição. */}
         <Tabs.Screen
           name="cadastro"
           options={{ href: null, title: 'Estabelecimento' }}
         />
 
         {/*
-          Mesma ideia para a execução da inspeção: ela não é uma aba, e
-          sim o destino de quem escolheu uma trilha em Nova Inspeção.
-          Não poderia ser aba nem se quiséssemos — ela depende do
-          parâmetro `?trilha=`, e uma aba não tem como informá-lo.
+          A execução da auditoria periódica e da semestral. Não poderia
+          ser aba nem se quiséssemos: depende do parâmetro `?trilha=`, e
+          uma aba não tem como informá-lo. (A diária mora na aba Hoje.)
         */}
         <Tabs.Screen
           name="inspecao"

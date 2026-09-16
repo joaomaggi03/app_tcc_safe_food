@@ -1,40 +1,42 @@
 /**
  * app/nova-inspecao.tsx
  * ---------------------------------------------------------------
- * Tela NOVA INSPEÇÃO — rota "/nova-inspecao".
+ * Rota "/nova-inspecao" — a FOLHA de nova inspeção.
  *
- * O ponto de partida: escolher QUAL trilha preencher. Cada cartão abre
- * a tela de execução passando a trilha por parâmetro
- * ("/inspecao?trilha=diario") — é esse parâmetro que faz uma única tela
- * de execução servir às três trilhas, hoje e na Fase 5.
+ * Era uma aba. Deixou de ser: como aba, ela duplicava o cartão de
+ * prazos do Início (as mesmas três trilhas, com o mesmo selo de
+ * vencimento), de modo que escolher "diária" no Início levava a uma
+ * tela que pedia para escolher entre diária, periódica e semestral de
+ * novo. Um menu apontando para outro menu.
  *
- * Na Fase 2 esta tela mostrava o checklist inteiro, só para leitura.
- * Agora o checklist tem dono: ele é preenchido na tela de execução.
+ * Agora é uma AÇÃO, aberta pelo "+" da aba Hoje, e existe por um motivo
+ * só: começar a auditoria periódica ou a semestral fora de hora. O caso
+ * comum — a rotina do dia — não passa por aqui.
  *
- * No rodapé fica a lista de itens marcados como "não se aplica" (RF09),
- * com a opção de voltar a exibi-los. Sem ela o RF09 seria uma porta só
- * de ida: um toque errado esconderia uma exigência para sempre.
+ * A DIÁRIA NÃO TEM BOTÃO DE COMEÇAR AQUI. Ela vive na aba Hoje, e o
+ * modo (Rotina ou Completa) se escolhe lá, no cartão de abertura. Dois
+ * lugares oferecendo o mesmo começo é exatamente o que este redesenho
+ * foi feito para tirar — então este cartão informa o estado do dia e
+ * leva para lá.
+ *
+ * Os itens ocultos do RF09, que moravam no rodapé desta tela, foram
+ * para a aba Estabelecimento: são configuração, não ação.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   contarItensPorTrilha,
-  contarVerificacoesDaRotina,
   diaLocalISO,
   listarInspecoes,
-  listarItensOcultos,
-  reexibirItem,
   TRILHAS,
   type Estabelecimento,
-  type ItemOculto,
-  type ModoInspecao,
   type ResumoInspecao,
   type Trilha,
 } from '../db/consultas';
-import { statusDasTrilhas, type StatusTrilha } from '../db/periodicidade';
+import { statusDasTrilhas, type SituacaoTrilha, type StatusTrilha } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import {
@@ -66,12 +68,11 @@ export default function TelaNovaInspecao() {
 
 interface Dados {
   contagem: Record<Trilha, number>;
-  /** Quantas verificações a rotina guiada tem — o tamanho do modo Rotina. */
-  verificacoesRotina: number;
+  /** A inspeção aberta de cada trilha, se houver. */
   emAndamento: Partial<Record<Trilha, ResumoInspecao>>;
-  /** O prazo de cada trilha (RF05), na ordem de TRILHAS. */
+  /** A diária de hoje já concluída — só ela trava o cartão da diária. */
+  diariaConcluida: ResumoInspecao | null;
   prazos: StatusTrilha[];
-  ocultos: ItemOculto[];
 }
 
 function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
@@ -81,39 +82,29 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   const recarregar = useCallback(() => {
     const hoje = diaLocalISO();
     const emAndamento: Partial<Record<Trilha, ResumoInspecao>> = {};
+    let diariaConcluida: ResumoInspecao | null = null;
 
     for (const inspecao of listarInspecoes(estabelecimento.id)) {
-      if (inspecao.status !== 'em_andamento' || emAndamento[inspecao.trilha]) continue;
-
-      // A diária é presa ao dia: uma deixada aberta ontem não conta como
-      // "em andamento" hoje — abrir a trilha começa uma inspeção nova.
       if (inspecao.trilha === 'diario' && inspecao.dia_local !== hoje) continue;
+
+      if (inspecao.status === 'concluida') {
+        if (inspecao.trilha === 'diario' && !diariaConcluida) diariaConcluida = inspecao;
+        continue;
+      }
 
       // A lista vem da mais recente para a mais antiga, então a primeira
       // em andamento de cada trilha é a que será retomada.
-      emAndamento[inspecao.trilha] = inspecao;
+      if (!emAndamento[inspecao.trilha]) emAndamento[inspecao.trilha] = inspecao;
     }
 
     setDados({
       contagem: contarItensPorTrilha(estabelecimento.perfil_id, estabelecimento.id),
-      verificacoesRotina: contarVerificacoesDaRotina(
-        estabelecimento.perfil_id,
-        estabelecimento.id,
-      ),
       emAndamento,
+      diariaConcluida,
       prazos: statusDasTrilhas(estabelecimento),
-      ocultos: listarItensOcultos(estabelecimento.id),
     });
   }, [estabelecimento]);
 
-  /**
-   * `useFocusEffect` roda toda vez que a tela volta a ficar visível —
-   * diferente do `useEffect`, que rodaria só na primeira vez.
-   *
-   * É o que faz os números se atualizarem quando você volta de uma
-   * inspeção: se marcou dois itens como "não se aplica", a contagem da
-   * trilha já aparece menor aqui.
-   */
   useFocusEffect(recarregar);
 
   if (!dados) {
@@ -128,10 +119,9 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
-      <Text style={estilos.titulo}>{estabelecimento.nome}</Text>
       <Text style={estilos.subtitulo}>
         {total} exigências da RDC 216 se aplicam ao seu tipo de estabelecimento, separadas em
-        três trilhas. Escolha uma para começar.
+        três trilhas.
       </Text>
 
       {TRILHAS.map((trilha) => (
@@ -140,31 +130,15 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           trilha={trilha}
           quantidade={dados.contagem[trilha]}
           emAndamento={dados.emAndamento[trilha]}
-          verificacoes={dados.verificacoesRotina}
+          diariaConcluida={trilha === 'diario' ? dados.diariaConcluida : null}
           prazo={dados.prazos.find((prazo) => prazo.trilha === trilha)}
-          aoAbrir={(modo) => router.push(`/inspecao?trilha=${trilha}&modo=${modo}`)}
+          aoAbrir={() =>
+            trilha === 'diario'
+              ? router.replace('/')
+              : router.replace(`/inspecao?trilha=${trilha}`)
+          }
         />
       ))}
-
-      <ItensOcultos
-        ocultos={dados.ocultos}
-        aoReexibir={(item) => {
-          Alert.alert(
-            'Voltar a exibir?',
-            `O item ${item.codigo_rdc} volta a aparecer no checklist deste estabelecimento.`,
-            [
-              { text: 'Cancelar', style: 'cancel' },
-              {
-                text: 'Voltar a exibir',
-                onPress: () => {
-                  reexibirItem(estabelecimento.id, item.item_id);
-                  recarregar();
-                },
-              },
-            ],
-          );
-        }}
-      />
     </ScrollView>
   );
 }
@@ -172,41 +146,45 @@ function Trilhas({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 /**
  * O cartão de uma trilha.
  *
- * A diária é a única que oferece DOIS botões, porque é a única que se
- * repete todo dia. No modo Rotina, os mesmos itens da norma são
- * apresentados como verificações agrupadas, em linguagem operacional —
- * responder 11 perguntas é viável numa cozinha em operação; percorrer
- * 32 enunciados da RDC, não. O modo Completo continua ali para quem
- * quiser conferir exigência por exigência.
+ * O cartão inteiro é o toque — não há mais botões por dentro. Desde que
+ * a diária passou a morar na aba Hoje, nenhuma trilha tem duas portas
+ * daqui: ou se abre a inspeção, ou se vai para o lugar onde ela vive.
  */
 function CartaoTrilha({
   trilha,
   quantidade,
-  verificacoes,
   emAndamento,
+  diariaConcluida,
   prazo,
   aoAbrir,
 }: {
   trilha: Trilha;
   quantidade: number;
-  verificacoes: number;
   emAndamento: ResumoInspecao | undefined;
+  diariaConcluida: ResumoInspecao | null;
   prazo: StatusTrilha | undefined;
-  aoAbrir: (modo: ModoInspecao) => void;
+  aoAbrir: () => void;
 }) {
   const vazia = quantidade === 0;
-  const doisModos = trilha === 'diario' && verificacoes > 0;
 
-  const corpo = (
-    <>
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        estilos.cartao,
+        emAndamento && estilos.cartaoEmAndamento,
+        pressed && estilos.cartaoPressionado,
+        vazia && estilos.cartaoDesabilitado,
+      ]}
+      onPress={aoAbrir}
+      disabled={vazia}
+      accessibilityRole="button"
+    >
       <View style={estilos.cartaoTopo}>
         <Text style={estilos.cartaoTitulo}>{ROTULO_TRILHA[trilha]}</Text>
         <View style={estilos.contador}>
           <Text style={estilos.contadorTexto}>{quantidade}</Text>
         </View>
-        {doisModos ? null : (
-          <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
-        )}
+        <Ionicons name="chevron-forward" size={20} color={Cores.textoSuave} />
       </View>
 
       <Text style={estilos.cartaoDescricao}>{DESCRICAO_TRILHA[trilha]}</Text>
@@ -234,132 +212,39 @@ function CartaoTrilha({
           </Text>
         </View>
       ) : null}
-    </>
-  );
 
-  // Com dois modos o cartão inteiro não pode ser clicável: cada botão
-  // leva a um recorte diferente do mesmo checklist.
-  if (doisModos) {
-    return (
-      <View style={[estilos.cartao, emAndamento ? estilos.cartaoEmAndamento : null]}>
-        {corpo}
-
-        <View style={estilos.modos}>
-          <Pressable
-            style={({ pressed }) => [
-              estilos.botaoModo,
-              estilos.botaoModoPrincipal,
-              pressed && estilos.pressionado,
-            ]}
-            onPress={() => aoAbrir('rotina')}
-            accessibilityRole="button"
-          >
-            <Text style={estilos.botaoModoPrincipalTexto}>Rotina · {verificacoes}</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [estilos.botaoModo, pressed && estilos.pressionado]}
-            onPress={() => aoAbrir('completa')}
-            accessibilityRole="button"
-          >
-            <Text style={estilos.botaoModoTexto}>Completa · {quantidade}</Text>
-          </Pressable>
+      {diariaConcluida ? (
+        <View style={estilos.faixaConcluida}>
+          <Ionicons name="checkmark-circle" size={14} color={Cores.primariaTexto} />
+          <Text style={estilos.faixaConcluidaTexto}>
+            Concluída hoje · {diariaConcluida.respondidos} respondidos
+          </Text>
         </View>
+      ) : null}
 
-        <Text style={estilos.notaModo}>
-          A rotina reúne as {quantidade} exigências diárias em {verificacoes} verificações, na
-          ordem do expediente e com os artigos da RDC citados em cada uma.
+      {trilha === 'diario' ? (
+        <Text style={estilos.notaDiaria}>
+          A diária é preenchida na aba Hoje, onde também se escolhe entre Rotina e Completa.
         </Text>
-      </View>
-    );
-  }
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        estilos.cartao,
-        emAndamento && estilos.cartaoEmAndamento,
-        pressed && estilos.cartaoPressionado,
-        vazia && estilos.cartaoDesabilitado,
-      ]}
-      onPress={() => aoAbrir('completa')}
-      disabled={vazia}
-      accessibilityRole="button"
-    >
-      {corpo}
+      ) : null}
     </Pressable>
   );
 }
 
-function ItensOcultos({
-  ocultos,
-  aoReexibir,
-}: {
-  ocultos: ItemOculto[];
-  aoReexibir: (item: ItemOculto) => void;
-}) {
-  // Começa fechada: é informação de revisão, não do dia a dia.
-  const [aberta, setAberta] = useState(false);
-
-  if (ocultos.length === 0) return null;
-
-  return (
-    <View style={estilos.ocultos}>
-      <Pressable
-        style={estilos.ocultosCabecalho}
-        onPress={() => setAberta((valor) => !valor)}
-        accessibilityRole="button"
-      >
-        <Ionicons name="eye-off-outline" size={16} color={Cores.textoSecundario} />
-        <Text style={estilos.ocultosTitulo}>
-          {ocultos.length} {ocultos.length === 1 ? 'item marcado' : 'itens marcados'} como “não
-          se aplica”
-        </Text>
-        <Ionicons
-          name={aberta ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color={Cores.textoSuave}
-        />
-      </Pressable>
-
-      {aberta
-        ? ocultos.map((item) => (
-            <View key={item.item_id} style={estilos.ocultoItem}>
-              <Text style={estilos.ocultoCodigo}>
-                {item.codigo_rdc} · {item.categoria_nome}
-              </Text>
-              <Text style={estilos.ocultoTexto} numberOfLines={3}>
-                {item.texto}
-              </Text>
-              <Pressable
-                style={estilos.ocultoBotao}
-                onPress={() => aoReexibir(item)}
-                accessibilityRole="button"
-              >
-                <Ionicons name="eye-outline" size={14} color={Cores.primariaTexto} />
-                <Text style={estilos.ocultoBotaoTexto}>Voltar a exibir</Text>
-              </Pressable>
-            </View>
-          ))
-        : null}
-    </View>
-  );
-}
-
-/** Cor do selo de prazo, por situação. */
+/** Fundo do selo de vencimento, por situação (ver db/vencimento.ts). */
 const estiloDoPrazo = StyleSheet.create({
   em_dia: { backgroundColor: Cores.primariaClara },
-  vence_em_breve: { backgroundColor: Cores.fundo, borderWidth: 1, borderColor: Cores.borda },
+  vence_em_breve: { backgroundColor: Cores.fundo },
   vencida: { backgroundColor: Cores.acentoSuave },
-  nunca_feita: { backgroundColor: Cores.fundo, borderWidth: 1, borderColor: Cores.borda },
-});
+  nunca_feita: { backgroundColor: Cores.fundo },
+}) as Record<SituacaoTrilha, object>;
 
 const estiloTextoDoPrazo = StyleSheet.create({
   em_dia: { color: Cores.sobrePrimaria },
-  vence_em_breve: { color: Cores.texto },
+  vence_em_breve: { color: Cores.textoSecundario },
   vencida: { color: Cores.acentoForte },
-  nunca_feita: { color: Cores.textoSecundario },
-});
+  nunca_feita: { color: Cores.textoSuave },
+}) as Record<SituacaoTrilha, object>;
 
 const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
@@ -372,12 +257,10 @@ const estilos = StyleSheet.create({
   },
   aviso: { fontSize: 14, color: Cores.textoSuave },
 
-  titulo: { fontSize: 22, fontWeight: '700', color: Cores.texto },
   subtitulo: {
     fontSize: 14,
     lineHeight: 21,
     color: Cores.textoSecundario,
-    marginTop: 6,
     marginBottom: 18,
   },
 
@@ -402,7 +285,14 @@ const estilos = StyleSheet.create({
   },
   contadorTexto: { fontSize: 12, fontWeight: '700', color: Cores.sobrePrimaria },
   cartaoDescricao: { fontSize: 13, lineHeight: 20, color: Cores.textoSecundario, marginTop: 6 },
-  prazoLinha: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+
+  prazoLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
   prazoSelo: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   prazoTexto: { fontSize: 12, fontWeight: '700' },
   prazoDetalhe: { fontSize: 12, color: Cores.textoSuave },
@@ -418,42 +308,17 @@ const estilos = StyleSheet.create({
     marginTop: 12,
   },
   faixaAndamentoTexto: { flex: 1, fontSize: 12, color: Cores.sobrePrimaria },
-
-  modos: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  botaoModo: {
-    flex: 1,
+  faixaConcluida: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Cores.borda,
+    gap: 6,
     backgroundColor: Cores.fundo,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 12,
   },
-  botaoModoPrincipal: { backgroundColor: Cores.primaria, borderColor: Cores.primaria },
-  botaoModoPrincipalTexto: { fontSize: 14, fontWeight: '700', color: Cores.sobrePrimaria },
-  botaoModoTexto: { fontSize: 14, fontWeight: '600', color: Cores.textoSecundario },
-  pressionado: { opacity: 0.75 },
-  notaModo: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 10 },
+  faixaConcluidaTexto: { flex: 1, fontSize: 12, color: Cores.textoSecundario },
 
-  ocultos: {
-    marginTop: 14,
-    backgroundColor: Cores.superficie,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Cores.borda,
-    overflow: 'hidden',
-  },
-  ocultosCabecalho: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14 },
-  ocultosTitulo: { flex: 1, fontSize: 13, fontWeight: '600', color: Cores.textoSecundario },
-  ocultoItem: {
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    borderTopWidth: 1,
-    borderTopColor: Cores.divisor,
-    paddingTop: 12,
-  },
-  ocultoCodigo: { fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
-  ocultoTexto: { fontSize: 13, lineHeight: 19, color: Cores.textoSecundario, marginTop: 4 },
-  ocultoBotao: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  ocultoBotaoTexto: { fontSize: 13, fontWeight: '600', color: Cores.primariaTexto },
+  notaDiaria: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 10 },
 });

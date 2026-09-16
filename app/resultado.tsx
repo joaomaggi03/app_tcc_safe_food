@@ -62,7 +62,7 @@ export default function TelaResultado() {
   }, [inspecaoId]);
 
   if (!dados) {
-    return <Redirect href="/historico" />;
+    return <Redirect href="/conformidade" />;
   }
 
   const { inspecao, categorias } = dados;
@@ -88,15 +88,15 @@ export default function TelaResultado() {
           accessibilityRole="button"
         >
           <Ionicons name="home-outline" size={18} color={Cores.sobrePrimaria} />
-          <Text style={estilos.botaoTexto}>Voltar ao início</Text>
+          <Text style={estilos.botaoTexto}>Voltar para Hoje</Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [estilos.botaoSecundario, pressed && estilos.pressionado]}
-          onPress={() => router.replace('/historico')}
+          onPress={() => router.replace('/conformidade')}
           accessibilityRole="button"
         >
-          <Text style={estilos.botaoSecundarioTexto}>Ver histórico</Text>
+          <Text style={estilos.botaoSecundarioTexto}>Ver conformidade</Text>
         </Pressable>
       </View>
     </ScrollView>

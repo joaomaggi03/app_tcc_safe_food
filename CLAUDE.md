@@ -160,9 +160,42 @@ exportação em PDF (RF08).
   tanto no Expo Go quanto num development build.
 - **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
   Fora do núcleo: plano de ação corretiva (RF07) e exportação em PDF (RF08).
-- **O fluxo de telas é provisório.** O autor não está convencido da navegação
-  atual e pode redesenhá-la. Mantenha a regra de negócio em `db/` e `store/`,
-  fora das telas.
+- **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
+  Histórico. Dois defeitos: o cartão de prazos do Início listava as três
+  trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de
+  novo (um menu apontando para outro menu); e a rotina diária, usada várias
+  vezes por dia, ficava a três toques — a mesma distância da auditoria, que
+  roda uma vez por mês. As abas agora são **três perguntas**:
+  - **Hoje** (`app/index.tsx`) — "o que eu faço agora?". A aba não aponta
+    para a diária: **ela é a diária**. Tem três estados — não iniciada
+    (cartão de abertura, onde se escolhe Rotina ou Completa), em andamento
+    (a lista) e concluída (o resumo do dia). O toque de abrir existe porque
+    `iniciarInspecao` GRAVA: sem ele, abrir o app num domingo deixaria uma
+    diária vazia no histórico.
+  - **Conformidade** (`app/conformidade.tsx`) — "como estou?". As quatro
+    leituras mais o histórico, que foi absorvido e **separado por trilha**:
+    numa lista corrida as ~26 diárias do mês afogam a única auditoria.
+  - **Estabelecimento** (`app/estabelecimento.tsx`) — "como o app está
+    configurado?". Cadastro, resumo do checklist, periodicidade da auditoria,
+    itens ocultos do RF09 e o "Testar alerta agora" (andaime de demonstração,
+    que saiu da tela principal).
+  - `/nova-inspecao` continua existindo como rota `href: null`, aberta pelo
+    "+" do header da aba Hoje. É por onde se começa a periódica ou a
+    semestral fora de hora. **A diária não tem início por lá** — ela mora em
+    Hoje, e duas portas para o mesmo começo era o defeito original.
+  - `app/historico.tsx` foi removido.
+  - A execução saiu de `app/inspecao.tsx` para
+    **`components/ExecucaoInspecao.tsx`**, porque tem dois donos: a aba Hoje
+    e a rota `/inspecao`. A tela que hospeda injeta o `prelude` (o que vem
+    acima da lista) e o `headerExtra` (o botão que divide o header com o
+    "recolher tudo" — o slot é um só, e duas chamadas a `setOptions`
+    apagariam uma à outra).
+  - O redesenho não encostou em `db/` nem em `store/`: os 60 testes passaram
+    sem alteração. **Mantenha a regra de negócio fora das telas** — é o que
+    tornou isto barato.
+  - Pendente: `/nova-inspecao` é uma tela empurrada, não uma folha modal.
+    Modal de verdade exige reestruturar em Stack + `(tabs)/`, que não foi
+    feito. O mockup do fluxo está em `docs/mockup/`.
 - Paleta da marca em `theme/cores.ts` (primária #3CAE63). Nenhuma tela escreve
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
