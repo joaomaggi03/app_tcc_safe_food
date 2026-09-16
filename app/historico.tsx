@@ -163,9 +163,11 @@ function Linha({
         <Numero rotulo="adequados" valor={inspecao.score.adequados} cor={Cores.primariaTexto} />
         <Numero rotulo="inadequados" valor={inspecao.score.inadequados} cor={Cores.acentoTexto} />
         {inspecao.score.criticosAvaliados > 0 ? (
+          // Mostra o que importa: quantos FALHARAM. Uma razão como
+          // "10/11" se confunde com progresso de preenchimento.
           <Numero
-            rotulo="críticos ok"
-            valor={`${inspecao.score.criticosAdequados}/${inspecao.score.criticosAvaliados}`}
+            rotulo={criticosComFalha > 0 ? 'críticos inadequados' : 'críticos ok'}
+            valor={criticosComFalha > 0 ? criticosComFalha : inspecao.score.criticosAvaliados}
             cor={criticosComFalha > 0 ? Cores.acentoTexto : Cores.primariaTexto}
           />
         ) : null}

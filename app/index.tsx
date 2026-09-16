@@ -44,6 +44,7 @@ import {
   formatarData,
   ROTULO_MODO,
   ROTULO_TRILHA,
+  textoCriticos,
   textoScore,
   textoUltimaConclusao,
   textoVencimento,
@@ -366,17 +367,15 @@ function PainelConformidade({
   );
 }
 
-/** "12 críticos ok · Completa" — o contexto que o número sozinho não dá. */
+/** "13/09 · Rotina · 1 crítico inadequado" — o contexto do número. */
 function detalheDaInspecao(inspecao: ResumoInspecao): string {
   const partes: string[] = [];
 
   if (inspecao.dia_local) partes.push(formatarData(inspecao.dia_local));
   if (inspecao.trilha === 'diario') partes.push(ROTULO_MODO[inspecao.modo]);
-  if (inspecao.score.criticosAvaliados > 0) {
-    partes.push(
-      `críticos ${inspecao.score.criticosAdequados}/${inspecao.score.criticosAvaliados}`,
-    );
-  }
+
+  const criticos = textoCriticos(inspecao.score);
+  if (criticos) partes.push(criticos);
 
   return partes.join(' · ');
 }

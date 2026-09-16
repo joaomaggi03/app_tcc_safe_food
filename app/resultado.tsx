@@ -159,7 +159,7 @@ function Criticos({ score }: { score: Score }) {
         />
         <Text style={estilos.tituloCartao}>Itens críticos</Text>
         <Text style={[estilos.criticoContagem, !tudoOk && estilos.criticoContagemAlerta]}>
-          {score.criticosAdequados} de {score.criticosAvaliados}
+          {tudoOk ? `${score.criticosAvaliados} ok` : `${falhas} inadequado${falhas > 1 ? 's' : ''}`}
         </Text>
       </View>
 

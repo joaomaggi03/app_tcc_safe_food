@@ -15,6 +15,7 @@ import type {
   ModoInspecao,
   MomentoDia,
   Resposta,
+  Score,
   Trilha,
 } from '../db/consultas';
 import type { SituacaoTrilha, StatusTrilha } from '../db/periodicidade';
@@ -86,6 +87,34 @@ export const ROTULO_ESTADO: Record<EstadoVerificacao, string> = {
   parcial: 'Parcial',
   pendente: 'Pendente',
 };
+
+/**
+ * Os itens críticos em uma frase.
+ *
+ * Nasceu de uma confusão real: o formato anterior, "críticos 10/11",
+ * parecia contador de preenchimento — como se 10 de 11 estivessem
+ * respondidos. Na verdade queria dizer "10 dos 11 avaliados estão
+ * adequados", ou seja, UM está reprovado. Num dado sobre risco
+ * sanitário direto, ambiguidade não é aceitável.
+ *
+ * A saída foi nomear o problema em vez de mostrar uma razão: o que
+ * interessa é quantos falharam, e isso vira a primeira palavra.
+ *
+ * Devolve `null` quando nenhum crítico foi avaliado — aí não há o que
+ * dizer, e a tela omite a informação em vez de escrever "0 de 0".
+ */
+export function textoCriticos(score: Score): string | null {
+  if (score.criticosAvaliados === 0) return null;
+
+  const falhas = score.criticosAvaliados - score.criticosAdequados;
+
+  if (falhas === 0) {
+    const n = score.criticosAvaliados;
+    return `${n} ${n === 1 ? 'crítico ok' : 'críticos ok'}`;
+  }
+
+  return `${falhas} ${falhas === 1 ? 'crítico inadequado' : 'críticos inadequados'}`;
+}
 
 /**
  * FAIXAS DO SCORE.
