@@ -16,6 +16,7 @@ import type {
   MomentoDia,
   Resposta,
   Score,
+  Sequencia,
   Trilha,
 } from '../db/consultas';
 import type { GrupoRdc275 } from '../db/faixa';
@@ -168,6 +169,49 @@ export const DIAS_SEMANA: { inicial: string; nome: string }[] = [
 export function textoDiasAbertos(total: number): string {
   if (total === 7) return 'Abre todos os dias.';
   return `Abre ${total} ${total === 1 ? 'dia' : 'dias'} por semana.`;
+}
+
+// ---------------------------------------------------------------
+// SEQUÊNCIA DE DIAS
+// ---------------------------------------------------------------
+
+/** "12 dias seguidos" — com o singular certo. */
+export function textoSequencia(dias: number): string {
+  return `${dias} ${dias === 1 ? 'dia seguido' : 'dias seguidos'}`;
+}
+
+/**
+ * A frase de apoio da sequência.
+ *
+ * O caso que mais importa é `em_risco`: é o único em que a frase pede
+ * uma ação, e é o estado em que a tela passa quase todo o expediente —
+ * a diária só é concluída no fechamento.
+ *
+ * Nenhuma delas cobra o dia perdido. A sequência aqui mede adesão a uma
+ * rotina de trabalho, não assiduidade num jogo: quem fechou o
+ * estabelecimento na terça não fez nada de errado.
+ */
+export function notaSequencia(sequencia: Sequencia): string {
+  switch (sequencia.situacao) {
+    case 'hoje_feita':
+      return sequencia.atual === sequencia.recorde && sequencia.atual > 1
+        ? 'É a sua melhor sequência até agora.'
+        : `Diária de hoje concluída. Melhor sequência: ${sequencia.recorde}.`;
+
+    case 'dia_fechado':
+      return sequencia.atual > 0
+        ? 'Hoje o estabelecimento não abre — a sequência continua.'
+        : 'Hoje o estabelecimento não abre.';
+
+    case 'em_risco':
+      return 'Conclua a diária de hoje para manter a sequência.';
+
+    case 'quebrada':
+      return `Nenhum dia seguido no momento. Sua melhor foi de ${sequencia.recorde}.`;
+
+    case 'nenhuma':
+      return 'Conclua a diária de hoje para começar a contar.';
+  }
 }
 
 /** Nome do grupo da RDC 275/2002. */

@@ -42,9 +42,11 @@ import {
   diaLocalISO,
   listarInspecoes,
   listarPerfis,
+  sequenciaDiaria,
   type Estabelecimento,
   type ModoInspecao,
   type ResumoInspecao,
+  type Sequencia,
   type Trilha,
 } from '../db/consultas';
 import { statusDasTrilhas, type StatusTrilha } from '../db/periodicidade';
@@ -52,10 +54,12 @@ import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import {
   faixaDoScore,
+  notaSequencia,
   ROTULO_MODO,
   ROTULO_TRILHA,
   textoCriticos,
   textoScore,
+  textoSequencia,
   textoUltimaConclusao,
   textoVencimento,
   type FaixaScore,
@@ -96,6 +100,7 @@ interface DadosHoje {
   prazos: StatusTrilha[];
   itensDiarios: number;
   verificacoes: number;
+  sequencia: Sequencia;
 }
 
 function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
@@ -109,6 +114,16 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
    * é `emAndamento.modo`, gravado em `inspecao.modo`.
    */
   const [modoEscolhido, setModoEscolhido] = useState<ModoInspecao | null>(null);
+  /**
+   * O usuário pediu para abrir num dia em que o estabelecimento não
+   * abre. Fica só na tela, e não no banco: quem abriu fora da rotina e
+   * concluiu a inspeção já deixou o registro do dia — uma segunda marca
+   * dizendo "abriu excepcionalmente" seria um segundo fato sobre a mesma
+   * coisa, e os dois poderiam discordar.
+   *
+   * Zera ao trocar de tela, que é o certo: amanhã a pergunta é outra.
+   */
+  const [abrirFechado, setAbrirFechado] = useState(false);
 
   const recarregar = useCallback(() => {
     const hoje = diaLocalISO();
@@ -122,6 +137,7 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
       prazos: statusDasTrilhas(estabelecimento),
       itensDiarios: contarItensPorTrilha(estabelecimento.perfil_id, estabelecimento.id).diario,
       verificacoes: contarVerificacoesDaRotina(estabelecimento.perfil_id, estabelecimento.id),
+      sequencia: sequenciaDiaria(estabelecimento),
     });
   }, [estabelecimento]);
 
@@ -175,6 +191,7 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           <Prelude
             estabelecimento={estabelecimento}
             pendentes={pendentes}
+            sequencia={dados.sequencia}
             router={router}
           />
         }
@@ -184,13 +201,20 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
-      <Prelude estabelecimento={estabelecimento} pendentes={pendentes} router={router} />
+      <Prelude
+        estabelecimento={estabelecimento}
+        pendentes={pendentes}
+        sequencia={dados.sequencia}
+        router={router}
+      />
 
       {concluida ? (
         <DiaConcluido
           inspecao={concluida}
           aoAbrir={() => router.push(`/resultado?id=${concluida.id}`)}
         />
+      ) : !dados.sequencia.abreHoje && !abrirFechado ? (
+        <DiaFechado aoAbrirAssim={() => setAbrirFechado(true)} />
       ) : (
         <Abertura
           itens={dados.itensDiarios}
@@ -205,18 +229,30 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 /**
  * O que vem antes da inspeção do dia, nos três estados.
  *
- * Duas coisas só: quem é o estabelecimento, numa linha, e o que está
- * FORA DO PRAZO. Trilha em dia não vira linha — a primeira pergunta ao
- * abrir o app é "tem algo atrasado?", e a resposta "não" se dá melhor
- * com silêncio do que com três selos verdes.
+ * Três coisas, nesta ordem: quem é o estabelecimento, o que está FORA DO
+ * PRAZO, e a sequência de dias. Trilha em dia não vira linha — a
+ * primeira pergunta ao abrir o app é "tem algo atrasado?", e a resposta
+ * "não" se dá melhor com silêncio do que com três selos verdes.
+ *
+ * O atraso vem ANTES da sequência de propósito: um é chamado para agir,
+ * o outro é estímulo. Quando não há atraso — o caso comum — a sequência
+ * fica logo abaixo do nome, encostada no cartão de abrir o dia, que é
+ * onde o estímulo tem para onde levar.
+ *
+ * Fica no prelúdio, e não no corpo da tela, porque o prelúdio é a única
+ * parte que aparece nos TRÊS estados. A diária fica aberta o dia todo:
+ * se a sequência morasse no corpo, ela sumiria justamente durante as
+ * horas em que a tela está mais em uso.
  */
 function Prelude({
   estabelecimento,
   pendentes,
+  sequencia,
   router,
 }: {
   estabelecimento: Estabelecimento;
   pendentes: StatusTrilha[];
+  sequencia: Sequencia;
   router: ReturnType<typeof useRouter>;
 }) {
   const nomePerfil = useMemo(
@@ -242,6 +278,58 @@ function Prelude({
           }
         />
       ))}
+
+      <CartaoSequencia sequencia={sequencia} />
+    </View>
+  );
+}
+
+/**
+ * A SEQUÊNCIA DE DIAS com a diária concluída.
+ *
+ * Mede adesão à rotina, e não conformidade — são perguntas diferentes, e
+ * por isso o número não se mistura com o score: dá para ter 95% de score
+ * fazendo a diária duas vezes por semana.
+ *
+ * A chama fica acesa só quando o dia de hoje já está fechado. Durante o
+ * expediente ela é contorno: é a diferença visual entre "garantido" e
+ * "ainda depende de você", que é o estado real da maior parte do dia.
+ *
+ * Nenhuma conta acontece aqui — os sete dias e o número vêm prontos de
+ * `db/sequencia.ts`.
+ */
+function CartaoSequencia({ sequencia }: { sequencia: Sequencia }) {
+  const acesa = sequencia.situacao === 'hoje_feita';
+  const contando = sequencia.atual > 0;
+
+  return (
+    <View style={estilos.sequencia}>
+      <Ionicons
+        name={acesa ? 'flame' : 'flame-outline'}
+        size={26}
+        color={acesa ? Cores.primaria : Cores.textoSuave}
+      />
+
+      <View style={estilos.flex}>
+        <Text style={[estilos.sequenciaNumero, !contando && estilos.sequenciaApagada]}>
+          {contando ? textoSequencia(sequencia.atual) : 'Sem sequência'}
+        </Text>
+        <Text style={estilos.sequenciaNota}>{notaSequencia(sequencia)}</Text>
+      </View>
+
+      <View style={estilos.tira}>
+        {sequencia.ultimosSete.map((dia) => (
+          <View
+            key={dia.dia}
+            style={[
+              estilos.ponto,
+              dia.fechado && estilos.pontoFechado,
+              dia.feita && estilos.pontoFeito,
+              dia.hoje && estilos.pontoHoje,
+            ]}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -292,6 +380,43 @@ function FaixaPrazo({ prazo, aoTocar }: { prazo: StatusTrilha; aoTocar: () => vo
         />
       ) : null}
     </Pressable>
+  );
+}
+
+/**
+ * HOJE O ESTABELECIMENTO NÃO ABRE.
+ *
+ * Substitui o cartão de abertura nos dias marcados como fechados no
+ * cadastro. Não esconde a inspeção: oferece. Feirante que resolveu abrir
+ * numa quarta, restaurante que fez um evento no domingo, padaria que
+ * abriu no feriado — todos precisam do checklist naquele dia, e um app
+ * que respondesse "hoje não" estaria atrapalhando o trabalho.
+ *
+ * O que muda é só quem PEDE: em dia de expediente o app cobra, em dia
+ * fechado ele espera ser chamado. A inspeção que sair daqui é igual a
+ * qualquer outra — mesma trilha, mesmo score, e conta na sequência.
+ */
+function DiaFechado({ aoAbrirAssim }: { aoAbrirAssim: () => void }) {
+  return (
+    <View style={estilos.cartao}>
+      <View style={estilos.linhaTitulo}>
+        <Ionicons name="moon-outline" size={20} color={Cores.textoSecundario} />
+        <Text style={estilos.tituloCartao}>Hoje não é dia de expediente</Text>
+      </View>
+      <Text style={estilos.notaCartao}>
+        Você marcou este dia como fechado no cadastro, então o app não vai cobrar a inspeção
+        diária nem contar o dia contra a sua sequência.
+      </Text>
+
+      <Pressable
+        style={({ pressed }) => [estilos.botaoAbrirAssim, pressed && estilos.pressionado]}
+        onPress={aoAbrirAssim}
+        accessibilityRole="button"
+      >
+        <Ionicons name="sunny-outline" size={17} color={Cores.primariaTexto} />
+        <Text style={estilos.botaoAbrirAssimTexto}>Abri hoje — fazer a inspeção</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -480,6 +605,49 @@ const estilos = StyleSheet.create({
   faixaTituloVencida: { color: Cores.acentoForte },
   faixaDetalhe: { fontSize: 12, color: Cores.textoSuave, marginTop: 2 },
   faixaDetalheVencida: { color: Cores.acentoTexto },
+
+  sequencia: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Cores.superficie,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  sequenciaNumero: { fontSize: 15, fontWeight: '700', color: Cores.texto },
+  sequenciaApagada: { color: Cores.textoSuave },
+  sequenciaNota: { fontSize: 12, color: Cores.textoSuave, marginTop: 2 },
+
+  botaoAbrirAssim: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Cores.primaria,
+  },
+  botaoAbrirAssimTexto: { fontSize: 14, fontWeight: '700', color: Cores.primariaTexto },
+
+  // A tirinha dos sete dias: o mais antigo à esquerda, hoje na ponta.
+  tira: { flexDirection: 'row', gap: 4 },
+  ponto: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Cores.borda,
+  },
+  pontoFeito: { backgroundColor: Cores.primaria },
+  // Dia sem expediente fica quase invisível: não é falta, é folga. Vem
+  // ANTES de `pontoFeito` na lista de estilos, para que uma diária feita
+  // num dia fechado continue aparecendo preenchida.
+  pontoFechado: { backgroundColor: Cores.divisor },
+  // Hoje ganha contorno para se achar na tira mesmo quando ainda não
+  // está preenchido — sem ele, a ponta direita some no fundo do cartão.
+  pontoHoje: { borderWidth: 1, borderColor: Cores.textoSuave },
 
   cartao: {
     backgroundColor: Cores.superficie,

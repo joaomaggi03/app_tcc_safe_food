@@ -27,7 +27,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
+    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "private": true

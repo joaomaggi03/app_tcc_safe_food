@@ -193,6 +193,22 @@ exportação em PDF (RF08).
     diferentes num número, e os pesos seriam arbitrários. O "score geral do
     estabelecimento" é o **atendimento da última auditoria periódica**; as
     quatro leituras continuam como estão.
+- **Sequência de dias na aba Hoje (feito).** Cartão no estilo "streak":
+  quantos dias seguidos a diária foi CONCLUÍDA, com recorde e uma tira dos
+  últimos sete dias. Mede **adesão à rotina**, não conformidade — são
+  perguntas diferentes, e por isso o número não se mistura com o score (dá
+  para ter 95% fazendo a diária duas vezes por semana).
+  - `db/sequencia.ts` — regra **pura** (padrão do `vencimento.ts`);
+    `sequenciaDiaria()` em `db/consultas.ts` só lê os dias e chama.
+    **Sem tabela nova:** a verdade já está em `inspecao.dia_local`.
+  - **A contagem vai até ONTEM quando a diária de hoje ainda não fechou.**
+    A diária fica aberta o dia todo; zerar o número às 8h da manhã seria
+    mentira. O estado vira `em_risco`, que é onde a tela passa quase todo o
+    expediente, e a nota pede a ação.
+  - Fica no `Prelude` de `app/index.tsx` — a única parte que aparece nos
+    TRÊS estados da aba. No corpo da tela, sumiria justamente durante as
+    horas em que ela está mais em uso. Ordem: identificação → atrasos →
+    sequência; o atraso é chamado para agir e vem antes do estímulo.
 - **Dias de funcionamento (schema v6, feito).** O cadastro pergunta em que
   dias da semana o estabelecimento abre, e o app para de cobrar a diária
   nas folgas. Era o defeito que feirante e ambulante (2 dos 6 perfis)

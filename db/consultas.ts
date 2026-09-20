@@ -13,9 +13,11 @@ import { diaLocalHaDias, diaLocalISO } from './datas';
 import { atendimentoDosItens } from './faixa';
 import { normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
+import { calcularSequencia, type Sequencia } from './sequencia';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
 export type { MomentoDia };
+export type { DiaDaSequencia, Sequencia, SituacaoSequencia } from './sequencia';
 
 // ---------------------------------------------------------------
 // CATÁLOGO DA NORMA
@@ -1313,4 +1315,39 @@ export function painelInicio(estabelecimentoId: number): PainelInicio {
         }
       : null,
   };
+}
+
+// ---------------------------------------------------------------
+// SEQUÊNCIA DE DIAS (adesão à rotina diária)
+// ---------------------------------------------------------------
+
+/**
+ * Quantos dias seguidos a diária vem sendo concluída.
+ *
+ * Lê os dias e entrega a conta para `db/sequencia.ts`, no mesmo arranjo
+ * do `periodicidade.ts` com o `vencimento.ts`: aqui mora o SQL, lá mora
+ * a regra — que é a parte com bordas e a parte testável.
+ *
+ * Só entram inspeções CONCLUÍDAS: uma diária aberta e abandonada não é
+ * um dia de rotina cumprido. E `dia_local IS NOT NULL` deixa de fora os
+ * registros anteriores ao schema v4, que não têm dia local gravado e
+ * furariam a sequência sem motivo.
+ */
+export function sequenciaDiaria(estabelecimento: Estabelecimento): Sequencia {
+  const linhas = obterBanco().getAllSync<{ dia_local: string }>(
+    `SELECT DISTINCT dia_local
+       FROM inspecao
+      WHERE estabelecimento_id = ?
+        AND trilha = 'diario'
+        AND status = 'concluida'
+        AND dia_local IS NOT NULL
+      ORDER BY dia_local DESC`,
+    estabelecimento.id,
+  );
+
+  return calcularSequencia(
+    linhas.map((linha) => linha.dia_local),
+    diaLocalISO(),
+    estabelecimento.dias_funcionamento,
+  );
 }
