@@ -54,6 +54,9 @@ consulte esses dois arquivos em vez de inventar estrutura nova.
    emulador/celular e sugira um commit antes da próxima fase.
 7. **Ordem ao criar arquivos:** todo trabalho novo em `/home` do projeto; siga a
    estrutura de pastas que o plano sugere (`app/`, `db/`, `data/`, `store/`, `components/`).
+8. **Commits sem coautoria.** Não acrescente `Co-Authored-By` (nem outra linha
+   de atribuição ao Claude) nas mensagens de commit ou de PR. O autor é o
+   João Lucas. Os commits antigos que já têm a linha ficam como estão.
 
 ## Ordem das fases (resumo — detalhes no plano)
 
