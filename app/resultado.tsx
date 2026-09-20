@@ -27,10 +27,13 @@ import {
   type Score,
   type ScoreCategoria,
 } from '../db/consultas';
+import { faixaRdc275, type GrupoRdc275 } from '../db/faixa';
 import Cores from '../theme/cores';
 import {
+  FAIXA_GRUPO,
   faixaDoScore,
   formatarDataHora,
+  ROTULO_GRUPO,
   ROTULO_MODO,
   ROTULO_TRILHA,
   textoScore,
@@ -43,6 +46,13 @@ const CORES_FAIXA: Record<FaixaScore, { fundo: string; texto: string }> = {
   atencao: { fundo: Cores.fundo, texto: Cores.texto },
   ruim: { fundo: Cores.acentoSuave, texto: Cores.acentoForte },
   sem_dados: { fundo: Cores.fundo, texto: Cores.textoSuave },
+};
+
+/** O mesmo, para o selo do grupo da RDC 275. */
+const CORES_GRUPO: Record<GrupoRdc275, { fundo: string; texto: string }> = {
+  1: { fundo: Cores.primariaClara, texto: Cores.sobrePrimaria },
+  2: { fundo: Cores.fundo, texto: Cores.texto },
+  3: { fundo: Cores.acentoSuave, texto: Cores.acentoForte },
 };
 
 export default function TelaResultado() {
@@ -71,6 +81,7 @@ export default function TelaResultado() {
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
       <Cartao inspecao={inspecao} />
       <Criticos score={inspecao.score} />
+      <Classificacao inspecao={inspecao} />
       <Cobertura inspecao={inspecao} />
       <PorCategoria categorias={categorias} />
 
@@ -167,6 +178,59 @@ function Criticos({ score }: { score: Score }) {
         {tudoOk
           ? 'Todos os itens de maior risco sanitário estão adequados.'
           : `${falhas} ${falhas === 1 ? 'item crítico está inadequado' : 'itens críticos estão inadequados'}. São os que oferecem risco direto à saúde — trate-os antes dos demais.`}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * A CLASSIFICAÇÃO DA RDC 275/2002 — só na auditoria periódica.
+ *
+ * Só nela porque é a inspeção estrutural completa, o análogo da lista
+ * de verificação da 275. A diária não tem equivalente na norma:
+ * carimbar "Grupo 1" numa rotina de 12 verificações seria inventar.
+ *
+ * Repare que o número exibido aqui NÃO é o score do cartão de cima. O
+ * score é ponderado (crítico vale mais); a norma conta item a item. São
+ * percentuais diferentes sobre a mesma inspeção, e exibi-los juntos é o
+ * ponto: um diz onde agir, o outro é o que se compara com a norma.
+ *
+ * O texto do rodapé declara a adaptação. Isso não é rodapé jurídico —
+ * é o que separa "a norma classifica assim" de "adaptamos um critério
+ * de indústria", e a segunda frase é a verdadeira.
+ */
+function Classificacao({ inspecao }: { inspecao: ResumoInspecao }) {
+  if (inspecao.trilha !== 'periodico') return null;
+
+  const atendimento = inspecao.score.atendimento;
+  const grupo = faixaRdc275(atendimento);
+  if (grupo === null) return null;
+
+  const cores = CORES_GRUPO[grupo];
+
+  return (
+    <View style={estilos.cartao}>
+      <View style={estilos.linhaTitulo}>
+        <Ionicons name="document-text-outline" size={18} color={Cores.textoSecundario} />
+        <Text style={estilos.tituloCartao}>Atendimento dos itens</Text>
+        <Text style={estilos.atendimentoValor}>{textoScore(atendimento)}</Text>
+      </View>
+
+      <View style={[estilos.seloGrupo, { backgroundColor: cores.fundo }]}>
+        <Text style={[estilos.seloGrupoTexto, { color: cores.texto }]}>
+          {ROTULO_GRUPO[grupo]}
+        </Text>
+        <Text style={[estilos.seloGrupoFaixa, { color: cores.texto }]}>{FAIXA_GRUPO[grupo]}</Text>
+      </View>
+
+      <Text style={estilos.notaCartao}>
+        Percentual por contagem simples — cada item vale um, sem o peso extra do item
+        crítico. É a métrica da lista de verificação da RDC 275/2002.
+      </Text>
+
+      <Text style={estilos.ressalva}>
+        Critério adaptado: a RDC 275/2002 é de estabelecimentos produtores/industrializadores
+        de alimentos. A RDC 216/2004, que este app segue, não classifica estabelecimentos.
       </Text>
     </View>
   );
@@ -310,6 +374,12 @@ const estilos = StyleSheet.create({
   criticoContagem: { fontSize: 16, fontWeight: '700', color: Cores.primariaTexto },
   criticoContagemAlerta: { color: Cores.acentoForte },
   coberturaValor: { fontSize: 15, fontWeight: '700', color: Cores.texto },
+
+  atendimentoValor: { fontSize: 20, fontWeight: '700', color: Cores.texto },
+  seloGrupo: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 12 },
+  seloGrupoTexto: { fontSize: 15, fontWeight: '700' },
+  seloGrupoFaixa: { fontSize: 12, marginTop: 2 },
+  ressalva: { fontSize: 11, lineHeight: 17, color: Cores.textoSuave, marginTop: 10 },
 
   barra: {
     height: 8,

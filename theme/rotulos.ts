@@ -18,6 +18,7 @@ import type {
   Score,
   Trilha,
 } from '../db/consultas';
+import type { GrupoRdc275 } from '../db/faixa';
 import type { SituacaoTrilha, StatusTrilha } from '../db/periodicidade';
 
 /** Nome de cada trilha de periodicidade. */
@@ -119,9 +120,13 @@ export function textoCriticos(score: Score): string | null {
 /**
  * FAIXAS DO SCORE.
  *
- * Os cortes (90 e 70) são decisão do app, não da RDC — a norma não
- * pontua nem classifica estabelecimentos. Servem só para dar cor e
- * leitura rápida ao número; a nota em si continua sendo o percentual.
+ * Os cortes (90 e 70) são decisão do app: a RDC 216/2004 não pontua nem
+ * classifica estabelecimentos. Servem só para dar cor e leitura rápida
+ * ao número; a nota em si continua sendo o percentual.
+ *
+ * Não confundir com a faixa da RDC 275/2002 (`db/faixa.ts`), que é de
+ * norma publicada, roda sobre o percentual NÃO ponderado e só aparece
+ * na auditoria periódica. São duas escalas diferentes, de propósito.
  */
 export type FaixaScore = 'bom' | 'atencao' | 'ruim' | 'sem_dados';
 
@@ -136,6 +141,27 @@ export function faixaDoScore(valor: number | null): FaixaScore {
 export function textoScore(valor: number | null): string {
   return valor === null ? '—' : `${valor}%`;
 }
+
+/** Nome do grupo da RDC 275/2002. */
+export const ROTULO_GRUPO: Record<GrupoRdc275, string> = {
+  1: 'Grupo 1',
+  2: 'Grupo 2',
+  3: 'Grupo 3',
+};
+
+/**
+ * A faixa de cada grupo, no texto da própria norma.
+ *
+ * Deliberadamente NÃO traduzimos os grupos para "bom", "regular" ou
+ * "ruim": a RDC 275 dá os percentuais e não dá adjetivos. Inventar um
+ * juízo que a norma não emite seria exatamente o que o CLAUDE.md
+ * proíbe — a norma é dado, não é nosso texto.
+ */
+export const FAIXA_GRUPO: Record<GrupoRdc275, string> = {
+  1: '76 a 100% de atendimento dos itens',
+  2: '51 a 75% de atendimento dos itens',
+  3: '0 a 50% de atendimento dos itens',
+};
 
 // ---------------------------------------------------------------
 // PERIODICIDADE (RF05)

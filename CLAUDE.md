@@ -158,6 +158,41 @@ exportação em PDF (RF08).
   `try`; onde não existe, os alertas ficam desligados e o app roda inteiro.
   Não use `executionEnvironment` para detectar: ele devolve `storeClient`
   tanto no Expo Go quanto num development build.
+- **Atendimento dos itens e faixa da RDC 275/2002 (feito).** O app passou a
+  ter DOIS percentuais sobre a mesma inspeção, e a distinção é deliberada:
+  - `score` — **ponderado** (`PESO_CRITICO`). Régua interna, serve para
+    priorizar o que consertar.
+  - `atendimento` — **contagem simples**, cada item valendo um. É a única
+    métrica comparável com a lista de verificação da RDC 275/2002, que não
+    tem peso. Sai das contagens que o `SELECT_PESOS` já trazia: **nenhum SQL
+    novo, nenhuma migração** — o score continua derivado, nunca gravado.
+  - `db/faixa.ts` — módulo **puro** (padrão do `vencimento.ts`) com
+    `atendimentoDosItens()` e `faixaRdc275()`. Os grupos são literais da
+    norma: 76–100 / 51–75 / 0–50. Testado em `tests/faixa.test.js`, onde os
+    limites são escritos à mão de propósito — são da norma, não nossos.
+  - Aparece **só na auditoria periódica** (`app/resultado.tsx`), porque é a
+    inspeção estrutural completa, o análogo da lista da 275. Carimbar
+    "Grupo 1" numa rotina diária de 12 verificações seria inventar.
+  - **Ressalvas que valem para o TCC, e que estão nos comentários do
+    `db/faixa.ts`:** (a) a RDC 275/2002 é de estabelecimentos
+    produtores/industrializadores — indústria; a RDC 216/2004 não pontua nem
+    classifica, então a faixa é critério **adaptado**, e a tela declara isso;
+    há precedente na literatura (Ferreira et al., Rev Inst Adolfo Lutz
+    2011;70(2):230-5, aplica as faixas a UANs, inclusive por bloco);
+    (b) a norma oferece a coluna "não se aplica" e **não diz** o que fazer
+    com ela — mantê-la fora do numerador e do denominador é interpretação
+    nossa preenchendo lacuna.
+  - O roteiro de inspeção de serviços de alimentação do município do Rio
+    (sobre a própria RDC 216) gradua requisito a requisito em
+    Imprescindível / Necessário / Recomendável — é o precedente de VISA para
+    o nosso `critico`. Ele usa **três** níveis e nós usamos dois; migrar para
+    três é trabalho futuro e não foi feito (custaria reclassificar os 89
+    itens do `rdc216.ts`; o comentário do `PESO_CRITICO` já prevê o caminho).
+  - **Decidido NÃO fazer: score geral composto** entre as trilhas. Nenhuma
+    norma, roteiro de VISA ou artigo combina inspeções de periodicidades
+    diferentes num número, e os pesos seriam arbitrários. O "score geral do
+    estabelecimento" é o **atendimento da última auditoria periódica**; as
+    quatro leituras continuam como estão.
 - **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
   Fora do núcleo: plano de ação corretiva (RF07) e exportação em PDF (RF08).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e

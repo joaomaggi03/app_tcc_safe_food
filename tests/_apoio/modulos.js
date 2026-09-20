@@ -10,6 +10,7 @@
  *   data/rdc216.ts         a norma estruturada
  *   data/rotina-diaria.ts  a rotina guiada
  *   db/datas.ts            contas de data
+ *   db/faixa.ts            atendimento dos itens e faixa da RDC 275
  *   db/vencimento.ts       a regra de vencimento
  *   db/schema.ts           as migrações
  *   db/seed.ts             a carga do catálogo
@@ -72,6 +73,7 @@ module.exports = {
   rdc216: () => exigir('data/rdc216.js'),
   rotinaDiaria: () => exigir('data/rotina-diaria.js'),
   datas: () => exigir('db/datas.js'),
+  faixa: () => exigir('db/faixa.js'),
   vencimento: () => exigir('db/vencimento.js'),
   schema: () => exigir('db/schema.js'),
   seed: () => exigir('db/seed.js'),

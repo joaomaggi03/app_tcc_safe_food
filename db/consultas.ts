@@ -10,6 +10,7 @@
 import type { MomentoDia } from '../data/rdc216';
 import { ROTINA_DIARIA } from '../data/rotina-diaria';
 import { diaLocalHaDias, diaLocalISO } from './datas';
+import { atendimentoDosItens } from './faixa';
 import { obterBanco } from './index';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -863,6 +864,13 @@ const PESO_EFETIVO = `CASE WHEN it.critico = 1 THEN ${PESO_CRITICO} ELSE it.peso
 export interface Score {
   /** 0 a 100, ou null quando nada foi avaliado (tudo "não observado"). */
   valor: number | null;
+  /**
+   * O MESMO resultado sem ponderação: 100 × adequados / avaliados, cada
+   * item valendo um. É a métrica que a RDC 275/2002 chama de
+   * "atendimento dos itens", e a única que pode receber o rótulo de
+   * grupo — ver db/faixa.ts. Não substitui `valor`: anda ao lado dele.
+   */
+  atendimento: number | null;
   /** Itens que entraram na conta (adequado + inadequado). */
   avaliados: number;
   adequados: number;
@@ -929,6 +937,7 @@ const SELECT_PESOS = `
 function montarScore(bruto: PesosBrutos | null): Score {
   const vazio: Score = {
     valor: null,
+    atendimento: null,
     avaliados: 0,
     adequados: 0,
     inadequados: 0,
@@ -944,6 +953,8 @@ function montarScore(bruto: PesosBrutos | null): Score {
       bruto.peso_avaliado > 0
         ? Math.round((100 * bruto.peso_adequado) / bruto.peso_avaliado)
         : null,
+    // Sai das CONTAGENS que o SELECT já traz — nenhum SQL novo.
+    atendimento: atendimentoDosItens(bruto.adequados ?? 0, bruto.avaliados ?? 0),
     avaliados: bruto.avaliados ?? 0,
     adequados: bruto.adequados ?? 0,
     inadequados: bruto.inadequados ?? 0,
