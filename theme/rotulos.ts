@@ -142,6 +142,34 @@ export function textoScore(valor: number | null): string {
   return valor === null ? '—' : `${valor}%`;
 }
 
+// ---------------------------------------------------------------
+// DIAS DE FUNCIONAMENTO
+// ---------------------------------------------------------------
+
+/**
+ * Os dias da semana na ordem da máscara de `db/funcionamento.ts`:
+ * índice 0 é domingo, igual ao `Date.getDay()`.
+ *
+ * A inicial é o que cabe num botão de 7 opções lado a lado; o nome
+ * inteiro vai para o leitor de tela, senão o app anuncia "S, T, Q" e
+ * ninguém entende nada.
+ */
+export const DIAS_SEMANA: { inicial: string; nome: string }[] = [
+  { inicial: 'D', nome: 'domingo' },
+  { inicial: 'S', nome: 'segunda-feira' },
+  { inicial: 'T', nome: 'terça-feira' },
+  { inicial: 'Q', nome: 'quarta-feira' },
+  { inicial: 'Q', nome: 'quinta-feira' },
+  { inicial: 'S', nome: 'sexta-feira' },
+  { inicial: 'S', nome: 'sábado' },
+];
+
+/** "Abre 6 dias por semana" — o resumo embaixo dos botões. */
+export function textoDiasAbertos(total: number): string {
+  if (total === 7) return 'Abre todos os dias.';
+  return `Abre ${total} ${total === 1 ? 'dia' : 'dias'} por semana.`;
+}
+
 /** Nome do grupo da RDC 275/2002. */
 export const ROTULO_GRUPO: Record<GrupoRdc275, string> = {
   1: 'Grupo 1',

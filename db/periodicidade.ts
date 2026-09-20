@@ -44,11 +44,11 @@ export type { SituacaoTrilha };
 /**
  * Intervalo da trilha DIÁRIA, em dias. Decisão do app.
  *
- * 1 dia é o óbvio para uma rotina diária, mas vale registrar o limite:
- * quem não abre todos os dias (feirante, ambulante) vai ver a trilha
- * vencida em dia de folga. Tratar isso exigiria saber os dias de
- * funcionamento do estabelecimento — informação que o cadastro não pede
- * hoje, e que fica como trabalho futuro.
+ * 1 dia é o óbvio para uma rotina diária. O intervalo, porém, corre
+ * sobre os dias de FUNCIONAMENTO: quem não abre todos os dias (feirante,
+ * ambulante) não pode ver a trilha vencida na folga. Quem resolve isso é
+ * `calcularVencimento`, que empurra o vencimento caído em dia fechado
+ * para o próximo dia aberto — ver `db/funcionamento.ts`.
  */
 export const INTERVALO_DIARIO = 1;
 
@@ -148,6 +148,7 @@ export function statusDaTrilha(
     intervaloDias,
     antecedenciaDias,
     hoje,
+    diasFuncionamento: estabelecimento.dias_funcionamento,
   });
 
   return {

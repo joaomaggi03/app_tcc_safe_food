@@ -113,9 +113,19 @@ test('a VERSAO_SCHEMA acompanha a quantidade de blocos de migração', () => {
   assert.equal(versao, blocos.length, 'criou um bloco novo e esqueceu de subir a VERSAO_SCHEMA');
 
   for (const v of blocos) {
+    // O `db.execSync(SCHEMA_Vn)` tem que aparecer DEPOIS do seu próprio
+    // `versaoAtual < n` e ANTES do guarda da versão seguinte — é o que
+    // prova que o bloco está no lugar certo.
+    //
+    // Antes esta expressão exigia o execSync colado no `{` do guarda.
+    // Afrouxou para caber uma guarda interna: o SCHEMA_V7 é um REPARO e
+    // só roda se a coluna não existir (ver o comentário dele). O que o
+    // teste garante continua o mesmo — nenhum bloco fica órfão.
     assert.match(
       fonte,
-      new RegExp(`versaoAtual < ${v}\\)\\s*\\{\\s*db\\.execSync\\(SCHEMA_V${v}\\)`),
+      new RegExp(
+        `versaoAtual < ${v}\\)(?:(?!versaoAtual <)[\\s\\S])*?db\\.execSync\\(SCHEMA_V${v}\\)`,
+      ),
       `o bloco SCHEMA_V${v} existe mas não é executado por migrar()`,
     );
   }

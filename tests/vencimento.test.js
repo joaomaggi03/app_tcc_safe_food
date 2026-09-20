@@ -126,3 +126,75 @@ test('qualquer intervalo de 1 a 365 produz resultado válido', () => {
     }
   }
 });
+
+// ---------------------------------------------------------------
+// DIAS DE FUNCIONAMENTO
+//
+// O vencimento que cai em dia fechado é empurrado para o próximo dia
+// aberto. É só isso — e resolve o resto sozinho, porque `diasParaVencer`
+// e a situação saem do vencimento. Setembro de 2026: 19 é sábado, 20
+// domingo, 21 segunda.
+// ---------------------------------------------------------------
+
+/** A trilha diária de quem fecha aos domingos. */
+function diaria(hoje, ultimaConclusao) {
+  return calcularVencimento({
+    ultimaConclusao,
+    dataCadastro: '2026-09-01',
+    intervaloDias: 1,
+    antecedenciaDias: 0,
+    hoje,
+    diasFuncionamento: '0111111',
+  });
+}
+
+test('a diária NÃO vence no domingo de quem fecha aos domingos', () => {
+  // Fechou sábado. No domingo o app não tem nada a cobrar.
+  const s = diaria('2026-09-20', '2026-09-19');
+
+  assert.equal(s.proximoVencimento, '2026-09-21', 'empurrado para segunda');
+  assert.equal(s.situacao, 'em_dia');
+});
+
+test('sem a máscara, a mesma diária apareceria vencendo no domingo', () => {
+  // O contraste que mostra o que a máscara conserta.
+  const s = calcularVencimento({
+    ultimaConclusao: '2026-09-19',
+    dataCadastro: '2026-09-01',
+    intervaloDias: 1,
+    antecedenciaDias: 0,
+    hoje: '2026-09-20',
+  });
+
+  assert.equal(s.proximoVencimento, '2026-09-20');
+  assert.equal(s.situacao, 'vence_em_breve', 'cobrança no dia de folga');
+});
+
+test('na segunda a diária volta a ser cobrada', () => {
+  const s = diaria('2026-09-21', '2026-09-19');
+
+  assert.equal(s.diasParaVencer, 0);
+  assert.equal(s.situacao, 'vence_em_breve');
+});
+
+test('faltar na segunda atrasa de verdade — a folga não é desculpa eterna', () => {
+  const s = diaria('2026-09-22', '2026-09-19');
+
+  assert.equal(s.diasParaVencer, -1);
+  assert.equal(s.situacao, 'vencida');
+});
+
+test('a auditoria periódica também não vence em dia fechado', () => {
+  // A regra vale para as três trilhas: 30 dias a partir de 21/08/2026
+  // cairiam em 20/09, um domingo.
+  const s = calcularVencimento({
+    ultimaConclusao: '2026-08-21',
+    dataCadastro: '2026-08-01',
+    intervaloDias: 30,
+    antecedenciaDias: 7,
+    hoje: '2026-09-20',
+    diasFuncionamento: '0111111',
+  });
+
+  assert.equal(s.proximoVencimento, '2026-09-21');
+});

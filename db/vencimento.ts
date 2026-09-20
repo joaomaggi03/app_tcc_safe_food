@@ -13,6 +13,7 @@
  */
 
 import { diferencaEmDias, somarDias } from './datas';
+import { proximoDiaAberto } from './funcionamento';
 
 export type SituacaoTrilha = 'nunca_feita' | 'vencida' | 'vence_em_breve' | 'em_dia';
 
@@ -32,6 +33,17 @@ export interface EntradaVencimento {
   intervaloDias: number;
   antecedenciaDias: number;
   hoje: string;
+  /**
+   * Máscara de dias de funcionamento (ver db/funcionamento.ts).
+   *
+   * Opcional: sem ela, a conta é a de sempre, dia de calendário corrido.
+   * Com ela, o vencimento que cai em dia fechado é EMPURRADO para o
+   * próximo dia aberto — e só isso já resolve o resto sozinho. Como
+   * `diasParaVencer` e a situação saem do vencimento, a trilha deixa
+   * de nascer vencida no domingo de quem não abre no domingo, sem que
+   * a regra abaixo precise conhecer o assunto.
+   */
+  diasFuncionamento?: string | null;
 }
 
 /**
@@ -49,7 +61,13 @@ export interface EntradaVencimento {
  */
 export function calcularVencimento(entrada: EntradaVencimento): CalculoVencimento {
   const base = entrada.ultimaConclusao ?? entrada.dataCadastro;
-  const proximoVencimento = somarDias(base, entrada.intervaloDias);
+
+  // Vence no dia da conta — ou no primeiro dia aberto a partir dele.
+  const proximoVencimento = proximoDiaAberto(
+    somarDias(base, entrada.intervaloDias),
+    entrada.diasFuncionamento,
+  );
+
   const diasParaVencer = diferencaEmDias(entrada.hoje, proximoVencimento);
 
   let situacao: SituacaoTrilha;

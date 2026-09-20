@@ -76,6 +76,18 @@ export function diferencaEmDias(de: string, ate: string): number {
   return Math.round((comoData(ate, 12).getTime() - comoData(de, 12).getTime()) / MS_POR_DIA);
 }
 
+/**
+ * O dia da semana de um dia local: 0 = domingo … 6 = sábado.
+ *
+ * É o mesmo número do `Date.getDay()` do JavaScript, de propósito — a
+ * máscara de funcionamento em `db/funcionamento.ts` é indexada por ele,
+ * e qualquer outra numeração (segunda = 0, por exemplo) criaria uma
+ * conversão a mais em todo lugar, que é onde o erro de um dia entra.
+ */
+export function diaDaSemana(dia: string): number {
+  return comoData(dia, 12).getDay();
+}
+
 /** Data e hora local a partir de um dia e uma hora inteira. */
 export function diaComHora(dia: string, hora: number): Date {
   return comoData(dia, hora);

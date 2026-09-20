@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 5;
+export const VERSAO_SCHEMA = 7;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -239,6 +239,60 @@ const SCHEMA_V5 = `
 `;
 
 /**
+ * v6: EM QUE DIAS DA SEMANA O ESTABELECIMENTO ABRE.
+ *
+ * Máscara de 7 caracteres '0'/'1' indexada pelo `Date.getDay()` —
+ * posição 0 é domingo. '1111110' é "abre de domingo a sexta". A leitura
+ * e as contas moram em `db/funcionamento.ts`.
+ *
+ * TEXT e não tabela pela regra de sempre: vira tabela o que o SQL
+ * precisa cruzar, e esta máscara é lida inteira junto do estabelecimento
+ * e nunca filtrada nem ordenada em SQL.
+ *
+ * Fica NULL nas linhas que já existem, e `normalizarFuncionamento` lê
+ * NULL como "abre todo dia" — que é exatamente o comportamento anterior.
+ * Ninguém que já usa o app vê a sequência mudar por causa da migração.
+ */
+const SCHEMA_V6 = `
+  ALTER TABLE estabelecimento ADD COLUMN dias_funcionamento TEXT;
+`;
+
+/**
+ * v7: REPARO da v6 — a mesma coluna, agora à prova de meio-caminho.
+ *
+ * INCIDENTE REAL. Durante o desenvolvimento, a `VERSAO_SCHEMA` subiu
+ * para 6 numa gravação do arquivo e o bloco `if (versaoAtual < 6)` só
+ * entrou na gravação seguinte. O Metro recarregou no meio: o app rodou
+ * um `migrar()` que não tinha o que executar, e ainda assim gravou
+ * `user_version = 6`. Resultado — versão 6 sem a coluna 6, e o
+ * `if (versaoAtual >= VERSAO_SCHEMA) return` fechando a porta para
+ * sempre. Nenhum reload conserta o que está gravado no banco.
+ *
+ * POR QUE UM BLOCO NOVO E NÃO UMA CORREÇÃO NO V6
+ * Editar o V6 não alcançaria quem já está com `user_version = 6` — é a
+ * mesma razão pela qual nenhum bloco antigo é editado neste arquivo. Um
+ * número de versão, uma vez gravado num aparelho, é passado: só se
+ * avança por cima dele.
+ *
+ * POR QUE ESTE É CONDICIONAL
+ * Ele roda em dois aparelhos diferentes: o que ficou torto (não tem a
+ * coluna) e o que migrou direito (tem). O SQLite não conhece
+ * `ADD COLUMN IF NOT EXISTS`, então a pergunta é feita em código, com
+ * `PRAGMA table_info`. É o primeiro bloco com guarda — os outros seis
+ * são incondicionais porque nenhum deles repara nada.
+ */
+const SCHEMA_V7 = `
+  ALTER TABLE estabelecimento ADD COLUMN dias_funcionamento TEXT;
+`;
+
+/** Essa tabela já tem essa coluna? */
+function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
+  return db
+    .getAllSync<{ name: string }>(`PRAGMA table_info(${tabela})`)
+    .some((c) => c.name === coluna);
+}
+
+/**
  * Cria/atualiza as tabelas conforme a versão do schema no aparelho.
  *
  * Roda em toda abertura do app, mas cada bloco só executa uma vez:
@@ -268,6 +322,17 @@ export function migrar(db: SQLiteDatabase): void {
 
   if (versaoAtual < 5) {
     db.execSync(SCHEMA_V5);
+  }
+
+  if (versaoAtual < 6) {
+    db.execSync(SCHEMA_V6);
+  }
+
+  // A guarda é o ponto do bloco: ver o comentário do SCHEMA_V7.
+  if (versaoAtual < 7) {
+    if (!temColuna(db, 'estabelecimento', 'dias_funcionamento')) {
+      db.execSync(SCHEMA_V7);
+    }
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

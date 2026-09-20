@@ -31,12 +31,19 @@ import {
   salvarEstabelecimento,
 } from '../db/consultas';
 import {
+  alternarDia,
+  FUNCIONAMENTO_PADRAO,
+  normalizarFuncionamento,
+  totalDiasAbertos,
+} from '../db/funcionamento';
+import {
   definirIntervaloPeriodico,
   INTERVALO_SEMESTRAL,
   obterEstabelecimentoAtualizado,
 } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
+import { DIAS_SEMANA, textoDiasAbertos } from '../theme/rotulos';
 
 export default function TelaCadastro() {
   const router = useRouter();
@@ -69,13 +76,35 @@ export default function TelaCadastro() {
   const [periodicidade, setPeriodicidade] = useState(
     String(estabelecimento?.periodicidade_auditoria_dias ?? 30),
   );
+  /**
+   * Em que dias da semana o lugar abre (schema v6).
+   *
+   * Quem já estava cadastrado tem NULL na coluna, e `normalizar` lê isso
+   * como "abre todo dia" — o mesmo comportamento de antes da coluna
+   * existir. Ninguém abre esta tela e encontra dias desmarcados que
+   * nunca desmarcou.
+   */
+  const [funcionamento, setFuncionamento] = useState(() =>
+    normalizarFuncionamento(estabelecimento?.dias_funcionamento ?? FUNCIONAMENTO_PADRAO),
+  );
   const [erro, setErro] = useState<string | null>(null);
 
-  const podeSalvar = nome.trim().length > 0 && perfilId !== '';
+  const abertos = totalDiasAbertos(funcionamento);
+
+  // Zero dia aberto não é configuração válida: sem expediente não há
+  // rotina diária, e toda conta de prazo perderia o chão. A trava fica
+  // no botão de salvar, e não num alerta depois do toque.
+  const podeSalvar = nome.trim().length > 0 && perfilId !== '' && abertos > 0;
 
   function aoSalvar() {
     try {
-      const salvo = salvarEstabelecimento({ nome, perfilId, cidade, responsavel });
+      const salvo = salvarEstabelecimento({
+        nome,
+        perfilId,
+        cidade,
+        responsavel,
+        diasFuncionamento: funcionamento,
+      });
 
       // O intervalo é gravado à parte porque `salvarEstabelecimento`
       // preserva de propósito o valor existente na edição — ele foi
@@ -150,6 +179,33 @@ export default function TelaCadastro() {
           })}
         </View>
 
+        {/* --- Dias de funcionamento --- */}
+        <Text style={estilos.rotuloCampo}>Em que dias você abre</Text>
+        <View style={estilos.semana}>
+          {DIAS_SEMANA.map((dia, indice) => {
+            const aberto = funcionamento[indice] === '1';
+            return (
+              <Pressable
+                key={dia.nome}
+                onPress={() => setFuncionamento((atual) => alternarDia(atual, indice))}
+                style={[estilos.dia, aberto && estilos.diaAberto]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: aberto }}
+                accessibilityLabel={dia.nome}
+              >
+                <Text style={[estilos.diaTexto, aberto && estilos.diaTextoAberto]}>
+                  {dia.inicial}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={estilos.ajuda}>
+          {abertos > 0
+            ? `${textoDiasAbertos(abertos)} Nos dias fechados o app não cobra a inspeção diária, e a sua sequência de dias não se perde. Se precisar abrir num dia desses, a aba Hoje deixa começar a inspeção mesmo assim.`
+            : 'Marque pelo menos um dia: sem expediente não há rotina diária a controlar.'}
+        </Text>
+
         {/* --- Campos opcionais --- */}
         <Text style={estilos.rotuloCampo}>
           Cidade <Text style={estilos.opcional}>(opcional)</Text>
@@ -212,7 +268,11 @@ export default function TelaCadastro() {
         </Pressable>
 
         {!podeSalvar ? (
-          <Text style={estilos.ajudaCentro}>Preencha o nome e escolha um tipo para continuar.</Text>
+          <Text style={estilos.ajudaCentro}>
+            {abertos === 0
+              ? 'Marque ao menos um dia de funcionamento para continuar.'
+              : 'Preencha o nome e escolha um tipo para continuar.'}
+          </Text>
         ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -221,6 +281,24 @@ export default function TelaCadastro() {
 
 const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
+
+  // Os sete dias cabem numa linha só; `flex: 1` divide o espaço em
+  // partes iguais para a fileira não desalinhar em tela estreita.
+  semana: { flexDirection: 'row', gap: 6 },
+  dia: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+    backgroundColor: Cores.superficie,
+  },
+  diaAberto: { backgroundColor: Cores.primariaClara, borderColor: Cores.primaria },
+  diaTexto: { fontSize: 15, fontWeight: '700', color: Cores.textoSuave },
+  diaTextoAberto: { color: Cores.sobrePrimaria },
+
   conteudo: { padding: 20, paddingBottom: 48 },
   etiqueta: {
     alignSelf: 'flex-start',

@@ -38,9 +38,10 @@ import {
   trilhaMaisUrgente,
   statusDasTrilhas,
 } from '../db/periodicidade';
+import { totalDiasAbertos } from '../db/funcionamento';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-import { formatarData, ROTULO_TRILHA } from '../theme/rotulos';
+import { formatarData, ROTULO_TRILHA, textoDiasAbertos } from '../theme/rotulos';
 
 /** De quanto em quanto o botão mexe no intervalo da auditoria. */
 const PASSO_DIAS = 5;
@@ -121,16 +122,21 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           </Pressable>
         </View>
 
-        {estabelecimento.cidade || estabelecimento.responsavel ? (
-          <View style={estilos.detalhes}>
-            {estabelecimento.cidade ? (
-              <Detalhe icone="location-outline" texto={estabelecimento.cidade} />
-            ) : null}
-            {estabelecimento.responsavel ? (
-              <Detalhe icone="person-outline" texto={estabelecimento.responsavel} />
-            ) : null}
-          </View>
-        ) : null}
+        <View style={estilos.detalhes}>
+          {estabelecimento.cidade ? (
+            <Detalhe icone="location-outline" texto={estabelecimento.cidade} />
+          ) : null}
+          {estabelecimento.responsavel ? (
+            <Detalhe icone="person-outline" texto={estabelecimento.responsavel} />
+          ) : null}
+          {/* Sempre visível: os dias de funcionamento mudam o que o app
+              cobra e como a sequência conta, então não podem ficar só
+              dentro do formulário de edição. */}
+          <Detalhe
+            icone="calendar-outline"
+            texto={textoDiasAbertos(totalDiasAbertos(estabelecimento.dias_funcionamento))}
+          />
+        </View>
 
         <Text style={estilos.dataCadastro}>
           Cadastrado em {formatarData(estabelecimento.data_cadastro)}
@@ -368,7 +374,7 @@ function Detalhe({
   icone,
   texto,
 }: {
-  icone: 'location-outline' | 'person-outline';
+  icone: 'location-outline' | 'person-outline' | 'calendar-outline';
   texto: string;
 }) {
   return (

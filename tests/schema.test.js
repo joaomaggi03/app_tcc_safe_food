@@ -254,3 +254,105 @@ test('o seed grava os tópicos como JSON legível de volta', () => {
     assert.ok(Array.isArray(lista) && lista.length > 0, `${linha.id}: tópicos vazios no banco`);
   }
 });
+
+/**
+ * INCIDENTE REAL (v6): o aparelho respondeu "no such column:
+ * dias_funcionamento" ao salvar o cadastro.
+ *
+ * A causa não era a migração — era o Metro. `db/index.ts` guarda a
+ * conexão numa variável de módulo e só chama `migrar()` ao abrir o
+ * banco; o Fast Refresh recarregou `db/consultas.ts` (que já escrevia na
+ * coluna nova) sem reavaliar `db/index.ts`, então o app ficou com SQL
+ * novo sobre uma conexão migrada antes da v6 existir. Um reload completo
+ * resolveu.
+ *
+ * O teste fica porque a dúvida foi legítima: ele prova que a coluna
+ * NASCE na atualização a partir da versão anterior, e não só na
+ * instalação nova — que é a parte que ninguém consegue conferir de
+ * cabeça quando o app dá erro na mão do usuário.
+ */
+test('a atualização da v5 cria dias_funcionamento, e a linha antiga fica NULL', () => {
+  const db = bancoVazio();
+
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 5);
+
+  db.runSync("INSERT INTO perfil VALUES ('feirante','Feirante','d',30,1)");
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Banca do Zé','feirante','2026-08-01',30)`,
+  );
+  assert.ok(!colunas(db, 'estabelecimento').includes('dias_funcionamento'), 'preparação: v5');
+
+  migrar(db);
+
+  assert.ok(
+    colunas(db, 'estabelecimento').includes('dias_funcionamento'),
+    'a coluna do schema v6 tem que existir depois de migrar',
+  );
+
+  const linha = db.getFirstSync('SELECT nome, dias_funcionamento FROM estabelecimento');
+  assert.equal(linha.nome, 'Banca do Zé');
+  assert.equal(
+    linha.dias_funcionamento,
+    null,
+    'NULL na linha antiga — lido como "abre todo dia", igual ao comportamento anterior',
+  );
+});
+
+/**
+ * O ESTADO TORTO que deu origem à v7 — reproduzido.
+ *
+ * O aparelho ficou com `user_version = 6` e sem a coluna
+ * `dias_funcionamento`, porque a VERSAO_SCHEMA subiu para 6 numa
+ * gravação do arquivo e o bloco da v6 só entrou na seguinte; o Metro
+ * recarregou no meio e o `migrar()` daquele instante não tinha o que
+ * executar, mas ainda assim carimbou a versão.
+ *
+ * A partir daí o `if (versaoAtual >= VERSAO_SCHEMA) return` fechava a
+ * porta: nenhum reload consertava, porque o problema estava gravado no
+ * banco. Este teste prova que a v7 reabre a porta — e o seguinte, que
+ * ela não estraga quem migrou direito.
+ */
+test('a v7 repara o aparelho que ficou na v6 sem a coluna', () => {
+  const db = bancoVazio();
+
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 5);
+  db.runSync("INSERT INTO perfil VALUES ('feirante','Feirante','d',30,1)");
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Banca do Zé','feirante','2026-08-01',30)`,
+  );
+
+  // O carimbo sem a coluna: exatamente o que o app fez no celular.
+  db.execSync('PRAGMA user_version = 6');
+  assert.ok(!colunas(db, 'estabelecimento').includes('dias_funcionamento'), 'preparação');
+
+  migrar(db);
+
+  assert.ok(
+    colunas(db, 'estabelecimento').includes('dias_funcionamento'),
+    'a v7 tem que criar a coluna que ficou faltando',
+  );
+  assert.equal(versao(db), VERSAO_SCHEMA);
+  assert.equal(
+    db.getFirstSync('SELECT nome FROM estabelecimento').nome,
+    'Banca do Zé',
+    'e sem levar junto os dados de quem estava testando',
+  );
+});
+
+test('a v7 não faz nada em quem já tem a coluna', () => {
+  // O outro aparelho: migrou certo até a v6. O ALTER repetido daria
+  // "duplicate column name" e quebraria a abertura do app, por isso o
+  // bloco pergunta antes.
+  const db = bancoVazio();
+
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 6);
+  assert.ok(colunas(db, 'estabelecimento').includes('dias_funcionamento'), 'preparação');
+
+  assert.doesNotThrow(() => migrar(db), 'a v7 não pode tentar criar a coluna de novo');
+  assert.equal(versao(db), VERSAO_SCHEMA);
+});

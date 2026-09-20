@@ -38,6 +38,8 @@
 import type * as TipoNotificacoes from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { Estabelecimento, Trilha } from './consultas';
+import { diaLocalISO } from './datas';
+import { proximoDiaAberto } from './funcionamento';
 import {
   ANTECEDENCIA_DIAS,
   HORA_LEMBRETE,
@@ -170,7 +172,7 @@ function textoDoAlerta(status: StatusTrilha, nome: string): { titulo: string; co
  * horas o alerta vai para a próxima ocorrência do horário: hoje, se
  * ainda não deu a hora; amanhã, se já passou.
  */
-function quandoAlertar(status: StatusTrilha): Date {
+function quandoAlertar(status: StatusTrilha, diasFuncionamento: string | null): Date {
   const hora = HORA_LEMBRETE[status.trilha];
   const [ano, mes, dia] = status.proximoVencimento.split('-').map(Number);
 
@@ -184,7 +186,21 @@ function quandoAlertar(status: StatusTrilha): Date {
   if (proximo.getTime() <= agora.getTime()) {
     proximo.setDate(proximo.getDate() + 1);
   }
-  return proximo;
+
+  /**
+   * NUNCA NO DIA DE FOLGA.
+   *
+   * Só vale para a queda no "próximo horário" acima: o alvo calculado a
+   * partir do vencimento já vem em dia aberto, porque
+   * `calcularVencimento` empurrou o vencimento. Este trecho cobre o
+   * atrasado, cujo lembrete vai para a próxima ocorrência do horário —
+   * e essa ocorrência pode cair justamente no domingo em que o lugar
+   * não abre. Cobrar a diária na folga é o incômodo que a máscara de
+   * funcionamento existe para evitar.
+   */
+  const aberto = proximoDiaAberto(diaLocalISO(proximo), diasFuncionamento);
+  const [anoA, mesA, diaA] = aberto.split('-').map(Number);
+  return new Date(anoA, mesA - 1, diaA, hora, 0, 0);
 }
 
 /**
@@ -223,7 +239,7 @@ export async function reagendarAlertas(estabelecimento: Estabelecimento): Promis
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: quandoAlertar(status),
+        date: quandoAlertar(status, estabelecimento.dias_funcionamento),
         channelId: CANAL_ANDROID,
       },
     });

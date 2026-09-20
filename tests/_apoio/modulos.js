@@ -11,6 +11,7 @@
  *   data/rotina-diaria.ts  a rotina guiada
  *   db/datas.ts            contas de data
  *   db/faixa.ts            atendimento dos itens e faixa da RDC 275
+ *   db/funcionamento.ts    os dias em que o estabelecimento abre
  *   db/vencimento.ts       a regra de vencimento
  *   db/schema.ts           as migrações
  *   db/seed.ts             a carga do catálogo
@@ -74,6 +75,7 @@ module.exports = {
   rotinaDiaria: () => exigir('data/rotina-diaria.js'),
   datas: () => exigir('db/datas.js'),
   faixa: () => exigir('db/faixa.js'),
+  funcionamento: () => exigir('db/funcionamento.js'),
   vencimento: () => exigir('db/vencimento.js'),
   schema: () => exigir('db/schema.js'),
   seed: () => exigir('db/seed.js'),

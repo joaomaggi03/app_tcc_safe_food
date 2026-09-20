@@ -11,6 +11,7 @@ import type { MomentoDia } from '../data/rdc216';
 import { ROTINA_DIARIA } from '../data/rotina-diaria';
 import { diaLocalHaDias, diaLocalISO } from './datas';
 import { atendimentoDosItens } from './faixa';
+import { normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -86,6 +87,12 @@ export interface Estabelecimento {
   periodicidade_auditoria_dias: number;
   cidade: string | null;
   responsavel: string | null;
+  /**
+   * Em que dias da semana o lugar abre: máscara de 7 caracteres '0'/'1'
+   * indexada pelo `Date.getDay()` — ver `db/funcionamento.ts`. NULL nas
+   * linhas anteriores ao schema v6, lido como "abre todo dia".
+   */
+  dias_funcionamento: string | null;
 }
 
 /** Os campos que a tela de cadastro preenche. */
@@ -94,6 +101,8 @@ export interface DadosEstabelecimento {
   perfilId: string;
   cidade?: string;
   responsavel?: string;
+  /** Máscara de dias de funcionamento; ausente mantém o que já está gravado. */
+  diasFuncionamento?: string;
 }
 
 /**
@@ -163,25 +172,31 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
   if (existente) {
     db.runSync(
       `UPDATE estabelecimento
-          SET nome = ?, perfil_id = ?, cidade = ?, responsavel = ?
+          SET nome = ?, perfil_id = ?, cidade = ?, responsavel = ?,
+              dias_funcionamento = ?
         WHERE id = ?`,
       dados.nome.trim(),
       dados.perfilId,
       ouNulo(dados.cidade),
       ouNulo(dados.responsavel),
+      // Sem valor informado, preserva o que está gravado — a tela de
+      // cadastro é a mesma da edição e pode salvar sem tocar no campo.
+      normalizarFuncionamento(dados.diasFuncionamento ?? existente.dias_funcionamento),
       existente.id,
     );
   } else {
     db.runSync(
       `INSERT INTO estabelecimento
-         (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias, cidade, responsavel)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias, cidade, responsavel,
+          dias_funcionamento)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       dados.nome.trim(),
       dados.perfilId,
       diaLocalISO(),
       perfil.periodicidade_auditoria_dias,
       ouNulo(dados.cidade),
       ouNulo(dados.responsavel),
+      normalizarFuncionamento(dados.diasFuncionamento),
     );
   }
 

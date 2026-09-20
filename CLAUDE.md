@@ -193,6 +193,40 @@ exportação em PDF (RF08).
     diferentes num número, e os pesos seriam arbitrários. O "score geral do
     estabelecimento" é o **atendimento da última auditoria periódica**; as
     quatro leituras continuam como estão.
+- **Dias de funcionamento (schema v6, feito).** O cadastro pergunta em que
+  dias da semana o estabelecimento abre, e o app para de cobrar a diária
+  nas folgas. Era o defeito que feirante e ambulante (2 dos 6 perfis)
+  sofriam todo dia.
+  - **A representação:** máscara de 7 caracteres `'0'/'1'` em
+    `estabelecimento.dias_funcionamento`, indexada pelo **`Date.getDay()`**
+    — posição 0 é domingo. Mesma numeração do JavaScript de propósito:
+    qualquer outra criaria uma conversão a mais, que é onde entra o erro de
+    um dia. TEXT e não tabela pela regra de sempre (o SQL só lê).
+  - `db/funcionamento.ts` — módulo **puro**. `normalizarFuncionamento` é
+    deliberadamente defensivo: NULL (linha pré-v6), tamanho errado, lixo ou
+    **só zeros** caem no padrão `'1111111'`. O caso "só zeros" não é
+    preciosismo — sem ele `proximoDiaAberto` roda para sempre dentro de um
+    render.
+  - **NULL = abre todo dia**, então a migração não muda o comportamento de
+    ninguém que já usava o app.
+  - **Onde a máscara entra, em UM lugar cada:**
+    `calcularVencimento` empurra o vencimento caído em dia fechado para o
+    próximo dia aberto — e isso sozinho resolve as três trilhas, porque
+    `diasParaVencer` e a situação derivam do vencimento;
+    `db/sequencia.ts` pula o dia fechado ao contar; `quandoAlertar` empurra
+    o lembrete do atrasado para não tocar na folga.
+  - **A ORDEM DA REGRA na sequência:** pergunta-se pelo REGISTRO antes do
+    calendário. Diária feita conta sempre (inclusive num dia fechado — quem
+    abriu excepcionalmente e inspecionou fez o certo); dia fechado sem
+    diária é pulado; só dia ABERTO sem diária quebra. A ordem inversa foi
+    escrita primeiro e um teste pegou.
+  - **Abrir num dia fechado:** a aba Hoje troca o cartão de abertura por
+    "Hoje não é dia de expediente" + botão "Abri hoje — fazer a inspeção".
+    Não esconde, oferece. O estado fica **só na tela**, nunca no banco: a
+    inspeção concluída já é o registro de que houve expediente, e uma
+    segunda marca poderia discordar dela.
+  - Zero dia marcado trava o botão de salvar do cadastro: sem expediente não
+    há rotina diária e toda conta de prazo perde o chão.
 - **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
   Fora do núcleo: plano de ação corretiva (RF07) e exportação em PDF (RF08).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
@@ -238,3 +272,15 @@ exportação em PDF (RF08).
   Colunas novas entram sempre num bloco `SCHEMA_Vn` novo, nunca editando um
   bloco antigo. `ALTER TABLE` acrescenta a coluna no FIM da tabela: use
   sempre colunas nomeadas no INSERT.
+- **SUBA A `VERSAO_SCHEMA` E ACRESCENTE O BLOCO NA MESMA GRAVAÇÃO DO
+  ARQUIVO.** Com o Metro rodando, o app recarrega a cada gravação: se a
+  versão subir primeiro e o bloco entrar depois, existe um instante em que
+  o `migrar()` não tem o que executar e mesmo assim carimba a versão nova.
+  O aparelho fica com a versão sem as colunas dela, e o
+  `if (versaoAtual >= VERSAO_SCHEMA) return` fecha a porta para sempre —
+  nenhum reload conserta, porque o estado está no banco. **Foi o que
+  aconteceu na v6** (`no such column: dias_funcionamento`), e a saída foi a
+  v7: um bloco de REPARO, com guarda em `PRAGMA table_info`, porque editar
+  o bloco v6 não alcançaria quem já tem `user_version = 6`. Versão gravada
+  num aparelho é passado: só se avança por cima dela. Os dois estados
+  possíveis estão testados em `tests/schema.test.js`.
