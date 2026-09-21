@@ -5,9 +5,9 @@
  *
  * Regra: nenhuma tela escreve um código hexadecimal direto. Todas
  * importam daqui. Assim, mudar a identidade visual do app é mexer
- * num arquivo, e não caçar '#3CAE63' em vinte lugares.
+ * num arquivo, e não caçar '#006DB2' em vinte lugares.
  *
- * A paleta tem três rampas de 7 tons (100 = mais claro, 700 = mais
+ * A paleta tem quatro rampas de 7 tons (100 = mais claro, 700 = mais
  * escuro). Os tons 100-700 são a paleta "crua"; abaixo deles estão os
  * NOMES SEMÂNTICOS (texto, fundo, primaria...), que é o que as telas
  * devem usar no dia a dia. Semântico é melhor porque descreve a
@@ -15,7 +15,22 @@
  * sentido se um dia o cinza mudar de tom.
  */
 
-/** Verde — cor primária da marca. O tom 300 (#3CAE63) é a primária. */
+/** Azul — cor primária da marca. O tom 300 (#006DB2) é a primária. */
+export const azul = {
+  100: '#D3EAF8',
+  200: '#6FB6E3',
+  300: '#006DB2',
+  400: '#005A93',
+  500: '#004672',
+  600: '#002D4A',
+  700: '#001726',
+} as const;
+
+/**
+ * Verde — foi a primária até a troca para o azul. Continua na paleta só
+ * como a ponta "100%" do medidor de score: verde é a convenção universal
+ * de "bom" num medidor, e trocar pelo azul da marca apagaria isso.
+ */
 export const verde = {
   100: '#A2FCBA',
   200: '#4DD97D',
@@ -72,21 +87,26 @@ const brancoTranslucido = 'rgba(255, 255, 255, 0.93)';
 /**
  * NOMES SEMÂNTICOS — use estes nas telas.
  *
- * Sobre legibilidade: o verde 300 é claro demais para servir de TEXTO
- * sobre fundo branco (contraste 2.8:1, abaixo do mínimo de 4.5:1). Por
- * isso ele aparece como PREENCHIMENTO (etiquetas, botões), enquanto o
- * texto em verde usa o tom 400, que passa com 4.6:1. É o mesmo verde
- * da marca, só um passo mais escuro onde precisa ser lido.
+ * Sobre legibilidade: o azul 300 é ESCURO — passa como texto sobre
+ * branco (5,5:1) e pede texto BRANCO por cima dele, não escuro. Por isso
+ * há dois tokens de "texto sobre a primária":
+ *  - `sobrePrimaria`: em cima do azul sólido (botões, etiquetas);
+ *  - `sobrePrimariaClara`: em cima do `primariaClara` (selos, dicas),
+ *    onde o branco sumiria.
+ * Com o verde antigo um token bastava, porque o verde era claro e o
+ * mesmo texto escuro servia nos dois fundos.
  */
 export const Cores = {
   // Marca
-  primaria: verde[300],          // preenchimentos, destaques, marca
-  primariaTexto: verde[400],     // o verde quando ele é texto sobre branco
-  primariaEscura: verde[500],    // estados pressionados
-  primariaClara: verde[100],     // fundos suaves, realces
+  primaria: azul[300],           // preenchimentos, destaques, marca
+  primariaTexto: azul[300],      // o azul como texto sobre branco (5,5:1)
+  primariaEscura: azul[500],     // estados pressionados
+  primariaClara: azul[100],      // fundos suaves, realces
 
-  /** Texto escuro para usar EM CIMA do verde primário (contraste 6.5:1). */
-  sobrePrimaria: verde[700],
+  /** Texto em cima do azul primário SÓLIDO (branco, 5,5:1). */
+  sobrePrimaria: branco,
+  /** Texto em cima do `primariaClara` (azul-escuro, 11,5:1). */
+  sobrePrimariaClara: azul[600],
 
   // Acento (usado com parcimônia: alertas, erros, ênfase)
   acento: rosa[300],
@@ -111,7 +131,7 @@ export const Cores = {
   sombra: cinza[700],
 
   // Navegação
-  abaAtiva: verde[400],
+  abaAtiva: azul[300],
   abaInativa: cinza[400],
 
   // Medidor de score: o arco vai do rosa (0%) ao verde (100%)

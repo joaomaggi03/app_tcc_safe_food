@@ -66,8 +66,8 @@ const estilos = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  // Etiqueta em "pílula": aqui o verde primário aparece como
-  // preenchimento, com texto verde-escuro por cima (contraste 6,5:1).
+  // Etiqueta em "pílula": aqui o azul primário aparece como
+  // preenchimento, com texto branco por cima (contraste 5,5:1).
   // `overflow: hidden` é o que faz o borderRadius valer no Android.
   etiqueta: {
     alignSelf: 'flex-start',

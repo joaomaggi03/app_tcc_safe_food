@@ -205,7 +205,7 @@ function CartaoTrilha({
 
       {emAndamento ? (
         <View style={estilos.faixaAndamento}>
-          <Ionicons name="play-circle-outline" size={14} color={Cores.sobrePrimaria} />
+          <Ionicons name="play-circle-outline" size={14} color={Cores.sobrePrimariaClara} />
           <Text style={estilos.faixaAndamentoTexto}>
             Em andamento desde {formatarDataHora(emAndamento.data_inicio)} ·{' '}
             {emAndamento.respondidos} respondidos
@@ -240,7 +240,7 @@ const estiloDoPrazo = StyleSheet.create({
 }) as Record<SituacaoTrilha, object>;
 
 const estiloTextoDoPrazo = StyleSheet.create({
-  em_dia: { color: Cores.sobrePrimaria },
+  em_dia: { color: Cores.sobrePrimariaClara },
   vence_em_breve: { color: Cores.textoSecundario },
   vencida: { color: Cores.acentoForte },
   nunca_feita: { color: Cores.textoSuave },
@@ -283,7 +283,7 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  contadorTexto: { fontSize: 12, fontWeight: '700', color: Cores.sobrePrimaria },
+  contadorTexto: { fontSize: 12, fontWeight: '700', color: Cores.sobrePrimariaClara },
   cartaoDescricao: { fontSize: 13, lineHeight: 20, color: Cores.textoSecundario, marginTop: 6 },
 
   prazoLinha: {
@@ -307,7 +307,7 @@ const estilos = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 12,
   },
-  faixaAndamentoTexto: { flex: 1, fontSize: 12, color: Cores.sobrePrimaria },
+  faixaAndamentoTexto: { flex: 1, fontSize: 12, color: Cores.sobrePrimariaClara },
   faixaConcluida: {
     flexDirection: 'row',
     alignItems: 'center',

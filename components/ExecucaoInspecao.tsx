@@ -642,7 +642,7 @@ function Cabecalho({
       </View>
 
       <View style={estilos.dica}>
-        <Ionicons name="save-outline" size={14} color={Cores.sobrePrimaria} />
+        <Ionicons name="save-outline" size={14} color={Cores.sobrePrimariaClara} />
         <Text style={estilos.dicaTexto}>
           {trilha === 'diario'
             ? 'Esta inspeção fica aberta o dia todo: marque cada item na hora em que acontecer e conclua no fim do expediente.'
@@ -1130,7 +1130,7 @@ const estilos = StyleSheet.create({
     padding: 12,
     marginTop: 14,
   },
-  dicaTexto: { flex: 1, fontSize: 12, lineHeight: 18, color: Cores.sobrePrimaria },
+  dicaTexto: { flex: 1, fontSize: 12, lineHeight: 18, color: Cores.sobrePrimariaClara },
 
   // --- bloco recolhível (primeiro nível) ---
   grupo: {
@@ -1176,7 +1176,7 @@ const estilos = StyleSheet.create({
   codigoSecao: {
     fontSize: 11,
     fontWeight: '700',
-    color: Cores.sobrePrimaria,
+    color: Cores.sobrePrimariaClara,
     backgroundColor: Cores.primariaClara,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -1194,7 +1194,7 @@ const estilos = StyleSheet.create({
     borderWidth: 1,
     borderColor: Cores.borda,
   },
-  // Uma borda verde discreta marca o que já foi respondido, para dar
+  // Uma borda na cor primária marca o que já foi respondido, para dar
   // noção de avanço ao rolar a lista.
   itemRespondido: { borderColor: Cores.primaria },
   // Item aberto dentro de uma verificação: recuado e com uma faixa à
@@ -1249,7 +1249,7 @@ const estilos = StyleSheet.create({
   seloTrilha: { backgroundColor: Cores.fundo },
   seloTrilhaTexto: { fontSize: 11, fontWeight: '600', color: Cores.textoSecundario },
   seloLegal: { backgroundColor: Cores.primariaClara },
-  seloLegalTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimaria },
+  seloLegalTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimariaClara },
   seloCritico: { backgroundColor: Cores.acentoSuave },
   seloCriticoTexto: { fontSize: 11, fontWeight: '700', color: Cores.acentoForte },
 
@@ -1297,7 +1297,7 @@ const estiloEscolhido = StyleSheet.create({
 });
 
 const estiloTextoEscolhido = StyleSheet.create({
-  adequado: { color: Cores.sobrePrimaria, fontWeight: '700' },
+  adequado: { color: Cores.sobrePrimariaClara, fontWeight: '700' },
   inadequado: { color: Cores.acentoForte, fontWeight: '700' },
   nao_se_aplica: { color: Cores.texto, fontWeight: '700' },
   nao_observado: { color: Cores.texto, fontWeight: '700' },

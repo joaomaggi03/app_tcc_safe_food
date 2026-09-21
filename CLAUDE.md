@@ -304,7 +304,7 @@ exportação em PDF (RF08).
     com a faixa.
   - Depende de `react-native-svg`, instalado com `npx expo install` (versão
     casada com o SDK). Roda no Expo Go, sem development build.
-- Paleta da marca em `theme/cores.ts` (primária #3CAE63). Nenhuma tela escreve
+- Paleta da marca em `theme/cores.ts` (primária #006DB2, azul). Nenhuma tela escreve
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
   Ao editar `data/rdc216.ts`, suba a `VERSAO_SEED` em `db/seed.ts`.

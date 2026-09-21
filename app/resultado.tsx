@@ -43,7 +43,7 @@ import {
 
 /** Cor de fundo e de texto de cada faixa do score. */
 const CORES_FAIXA: Record<FaixaScore, { fundo: string; texto: string }> = {
-  bom: { fundo: Cores.primariaClara, texto: Cores.sobrePrimaria },
+  bom: { fundo: Cores.primariaClara, texto: Cores.sobrePrimariaClara },
   atencao: { fundo: Cores.fundo, texto: Cores.texto },
   ruim: { fundo: Cores.acentoSuave, texto: Cores.acentoForte },
   sem_dados: { fundo: Cores.fundo, texto: Cores.textoSuave },
@@ -51,7 +51,7 @@ const CORES_FAIXA: Record<FaixaScore, { fundo: string; texto: string }> = {
 
 /** O mesmo, para o selo do grupo da RDC 275. */
 const CORES_GRUPO: Record<GrupoRdc275, { fundo: string; texto: string }> = {
-  1: { fundo: Cores.primariaClara, texto: Cores.sobrePrimaria },
+  1: { fundo: Cores.primariaClara, texto: Cores.sobrePrimariaClara },
   2: { fundo: Cores.fundo, texto: Cores.texto },
   3: { fundo: Cores.acentoSuave, texto: Cores.acentoForte },
 };
@@ -399,7 +399,7 @@ const estilos = StyleSheet.create({
   codigoCategoria: {
     fontSize: 11,
     fontWeight: '700',
-    color: Cores.sobrePrimaria,
+    color: Cores.sobrePrimariaClara,
     backgroundColor: Cores.primariaClara,
     paddingHorizontal: 6,
     paddingVertical: 2,

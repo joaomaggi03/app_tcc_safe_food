@@ -232,7 +232,7 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
  * Três coisas, nesta ordem: quem é o estabelecimento, o que está FORA DO
  * PRAZO, e a sequência de dias. Trilha em dia não vira linha — a
  * primeira pergunta ao abrir o app é "tem algo atrasado?", e a resposta
- * "não" se dá melhor com silêncio do que com três selos verdes.
+ * "não" se dá melhor com silêncio do que com três selos de "em dia".
  *
  * O atraso vem ANTES da sequência de propósito: um é chamado para agir,
  * o outro é estímulo. Quando não há atraso — o caso comum — a sequência

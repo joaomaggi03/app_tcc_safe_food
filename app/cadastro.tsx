@@ -297,7 +297,7 @@ const estilos = StyleSheet.create({
   },
   diaAberto: { backgroundColor: Cores.primariaClara, borderColor: Cores.primaria },
   diaTexto: { fontSize: 15, fontWeight: '700', color: Cores.textoSuave },
-  diaTextoAberto: { color: Cores.sobrePrimaria },
+  diaTextoAberto: { color: Cores.sobrePrimariaClara },
 
   conteudo: { padding: 20, paddingBottom: 48 },
   etiqueta: {
@@ -373,8 +373,8 @@ const estilos = StyleSheet.create({
     alignItems: 'center',
     marginTop: 28,
   },
-  // Opacidade em vez de cor mais escura: escurecer o fundo deixaria o
-  // texto verde-escuro ilegível durante o toque.
+  // Opacidade em vez de cor mais escura: o toque fica visível sem
+  // depender de um segundo tom de fundo.
   botaoPressionado: { opacity: 0.8 },
   botaoDesativado: { backgroundColor: Cores.borda },
   botaoTexto: { fontSize: 16, fontWeight: '700', color: Cores.sobrePrimaria },

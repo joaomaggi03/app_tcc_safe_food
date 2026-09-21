@@ -460,7 +460,7 @@ const estilos = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  seloAbertoTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimaria },
+  seloAbertoTexto: { fontSize: 11, fontWeight: '700', color: Cores.sobrePrimariaClara },
 
   maisAntigas: {
     fontSize: 12,
