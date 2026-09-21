@@ -51,6 +51,15 @@ export const cinza = {
 const branco = '#FFFFFF';
 
 /**
+ * Âmbar — só para o MEIO do degradê do medidor de score.
+ *
+ * A paleta não tem amarelo, e o degradê direto do rosa para o verde
+ * passa por um cinza barrento no meio. O âmbar é a ponte; não vira cor
+ * de texto nem de selo em lugar nenhum.
+ */
+const ambar = '#F2B33D';
+
+/**
  * Branco translúcido, para o que FLUTUA sobre o conteúdo.
  *
  * A transparência não é enfeite: ela mostra que há lista passando por
@@ -104,6 +113,11 @@ export const Cores = {
   // Navegação
   abaAtiva: verde[400],
   abaInativa: cinza[400],
+
+  // Medidor de score: o arco vai do rosa (0%) ao verde (100%)
+  medidorInicio: rosa[300],
+  medidorMeio: ambar,
+  medidorFim: verde[300],
 } as const;
 
 export default Cores;

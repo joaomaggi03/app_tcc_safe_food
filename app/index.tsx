@@ -36,6 +36,7 @@ import { Redirect, useFocusEffect, useNavigation, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ExecucaoInspecao } from '../components/ExecucaoInspecao';
+import MedidorScore from '../components/MedidorScore';
 import {
   contarItensPorTrilha,
   contarVerificacoesDaRotina,
@@ -58,7 +59,6 @@ import {
   ROTULO_MODO,
   ROTULO_TRILHA,
   textoCriticos,
-  textoScore,
   textoSequencia,
   textoUltimaConclusao,
   textoVencimento,
@@ -515,22 +515,20 @@ function DiaConcluido({
       onPress={aoAbrir}
       accessibilityRole="button"
     >
-      <View style={estilos.linhaConcluido}>
-        <View style={estilos.flex}>
-          <View style={estilos.linhaTitulo}>
-            <Ionicons name="checkmark-circle" size={20} color={Cores.primaria} />
-            <Text style={estilos.tituloCartao}>Dia concluído</Text>
-          </View>
-          <Text style={estilos.notaCartao}>
-            Diária de hoje · {ROTULO_MODO[inspecao.modo]} · {inspecao.respondidos} respondidos
-          </Text>
-        </View>
+      <View style={estilos.linhaTitulo}>
+        <Ionicons name="checkmark-circle" size={20} color={Cores.primaria} />
+        <Text style={estilos.tituloCartao}>Dia concluído</Text>
+      </View>
+      <Text style={estilos.notaCartao}>
+        Diária de hoje · {ROTULO_MODO[inspecao.modo]} · {inspecao.respondidos} respondidos
+      </Text>
 
-        <Text
-          style={[estilos.scoreGrande, { color: COR_FAIXA[faixaDoScore(inspecao.score.valor)] }]}
-        >
-          {textoScore(inspecao.score.valor)}
-        </Text>
+      {/* O mesmo medidor da tela de resultado; o número segue a cor da faixa. */}
+      <View style={estilos.medidor}>
+        <MedidorScore
+          valor={inspecao.score.valor}
+          corNumero={COR_FAIXA[faixaDoScore(inspecao.score.valor)]}
+        />
       </View>
 
       {criticos ? (
@@ -673,8 +671,7 @@ const estilos = StyleSheet.create({
   botaoModoTexto: { fontSize: 14, fontWeight: '600', color: Cores.textoSecundario },
   notaModo: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 12 },
 
-  linhaConcluido: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  scoreGrande: { fontSize: 28, fontWeight: '700' },
+  medidor: { marginTop: 14 },
   criticos: {
     flexDirection: 'row',
     alignItems: 'center',

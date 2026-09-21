@@ -27,6 +27,7 @@ import {
   type Score,
   type ScoreCategoria,
 } from '../db/consultas';
+import MedidorScore from '../components/MedidorScore';
 import { faixaRdc275, type GrupoRdc275 } from '../db/faixa';
 import Cores from '../theme/cores';
 import {
@@ -119,13 +120,13 @@ function Cartao({ inspecao }: { inspecao: ResumoInspecao }) {
   const cores = CORES_FAIXA[faixa];
   const data = inspecao.data_conclusao ?? inspecao.data_inicio;
 
+  // O arco é a moldura; a FAIXA do app (cortes 90/70) continua dizendo a
+  // cor do número, como antes pintava o fundo do cartão.
   return (
-    <View style={[estilos.cartaoScore, { backgroundColor: cores.fundo }]}>
-      <Text style={[estilos.scoreRotulo, { color: cores.texto }]}>Conformidade</Text>
-      <Text style={[estilos.scoreValor, { color: cores.texto }]}>
-        {textoScore(inspecao.score.valor)}
-      </Text>
-      <Text style={[estilos.scoreContexto, { color: cores.texto }]}>
+    <View style={estilos.cartaoScore}>
+      <MedidorScore valor={inspecao.score.valor} corNumero={cores.texto} />
+
+      <Text style={estilos.scoreContexto}>
         {ROTULO_TRILHA[inspecao.trilha]}
         {inspecao.trilha === 'diario' ? ` · ${ROTULO_MODO[inspecao.modo]}` : ''}
         {' · '}
@@ -133,11 +134,11 @@ function Cartao({ inspecao }: { inspecao: ResumoInspecao }) {
       </Text>
 
       {inspecao.score.valor === null ? (
-        <Text style={[estilos.scoreContexto, { color: cores.texto }]}>
+        <Text style={estilos.scoreContexto}>
           Nenhum item foi avaliado nesta inspeção.
         </Text>
       ) : (
-        <Text style={[estilos.scoreContexto, { color: cores.texto }]}>
+        <Text style={estilos.scoreContexto}>
           {inspecao.score.adequados} adequados e {inspecao.score.inadequados} inadequados em{' '}
           {inspecao.score.avaliados} itens avaliados
         </Text>
@@ -347,15 +348,18 @@ const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
   conteudo: { padding: 20, paddingBottom: 40 },
 
-  cartaoScore: { borderRadius: 14, padding: 22, alignItems: 'center' },
-  scoreRotulo: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  cartaoScore: {
+    backgroundColor: Cores.superficie,
+    borderRadius: 14,
+    padding: 22,
+    alignItems: 'center',
   },
-  scoreValor: { fontSize: 56, fontWeight: '700', marginVertical: 2 },
-  scoreContexto: { fontSize: 13, textAlign: 'center', marginTop: 2 },
+  scoreContexto: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
+    color: Cores.textoSecundario,
+  },
 
   cartao: {
     backgroundColor: Cores.superficie,
