@@ -284,6 +284,26 @@ exportação em PDF (RF08).
   - Pendente: `/nova-inspecao` é uma tela empurrada, não uma folha modal.
     Modal de verdade exige reestruturar em Stack + `(tabs)/`, que não foi
     feito. O mockup do fluxo está em `docs/mockup/`.
+- **Medidor de score (feito).** O score aparece como arco de 240° com degradê
+  e um marcador na posição da nota, em `components/MedidorScore.tsx` — usado
+  na tela de resultado e no cartão "Dia concluído" da aba Hoje. Só desenha:
+  o número vem pronto do `db/consultas.ts`, como no resto do app.
+  - **O SVG não tem degradê que acompanha a curva.** O arco usa um degradê
+    RETO, da esquerda para a direita, e o efeito sai certo porque a abertura
+    fica embaixo: ponta esquerda rosa, topo âmbar, ponta direita verde.
+  - **O âmbar (`medidorMeio`) existe só para isso.** A paleta não tem
+    amarelo, e o degradê direto do rosa ao verde passa por um cinza
+    barrento no meio. Ele não vira cor de texto nem de selo em lugar nenhum.
+  - **Score `null` é arco cinza, sem marcador, com "—" no lugar do número.**
+    Nunca 0%: "nada avaliado" e "tudo inadequado" são coisas diferentes, e é
+    a mesma distinção que o `db/consultas.ts` faz ao devolver `null` em vez
+    de zero quando o denominador é zero.
+  - O arco é moldura; quem gradua continua sendo a **faixa** do app (cortes
+    90/70), que dá a cor do número. O degradê é contínuo de propósito — se
+    ele tivesse três blocos de cor, viraria uma segunda escala competindo
+    com a faixa.
+  - Depende de `react-native-svg`, instalado com `npx expo install` (versão
+    casada com o SDK). Roda no Expo Go, sem development build.
 - Paleta da marca em `theme/cores.ts` (primária #3CAE63). Nenhuma tela escreve
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).
