@@ -365,6 +365,21 @@ exportação em PDF (RF08).
     com a faixa.
   - Depende de `react-native-svg`, instalado com `npx expo install` (versão
     casada com o SDK). Roda no Expo Go, sem development build.
+- **Ícones do app (feito).** A marca (escudo + garfo + folha) mora em
+  `assets/fonte/marca.svg` e os PNGs de `assets/` são GERADOS dela por
+  `npm run icones` — não são sete imagens editadas à mão, são a mesma marca
+  em sete recortes. O SVG usa `currentColor`, então um arquivo só serve ao
+  ícone branco sobre azul, ao azul sobre claro e ao monocromático.
+  - A rasterização usa o **Chrome/Edge já instalado** (`--headless
+    --screenshot`), para não acrescentar dependência nativa (`sharp`) ao
+    projeto. O script roda no PC e não entra no bundle.
+  - **O escudo é traço, com o miolo vazado.** É isso que faz o ícone de
+    notificação funcionar: o Android achata o ícone da barra de status em
+    branco pelo ALFA, e um quadrado azul cheio viraria um borrão sólido.
+  - O `foreground` do adaptativo ocupa só 46% do lado porque o launcher
+    recorta o ícone na forma dele e só garante os ~66% centrais.
+  - **Ícone é recurso NATIVO.** Trocar o PNG não muda nada no aparelho com o
+    Metro rodando — exige build novo no EAS.
 - Paleta da marca em `theme/cores.ts` (primária #006DB2, azul). Nenhuma tela escreve
   hexadecimal direto.
 - Migrações são versionadas por `PRAGMA user_version` (ver `VERSAO_SCHEMA`).

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!--
+    A marca do app: escudo (proteção), garfo (serviço de alimentação) e folha
+    (alimento). Desenhada aqui e não recortada de uma imagem pronta para que
+    cada ícone seja rasterizado no tamanho nativo — ver `gerar-icones.mjs`.
+
+    A cor é `currentColor` de propósito: o mesmo arquivo serve ao ícone branco
+    sobre azul, ao azul sobre claro e ao monocromático do Android, e poderia
+    ser usado por `react-native-svg` dentro do app sem alteração.
+
+    O escudo é TRAÇO, não preenchimento. O miolo fica vazado, então o fundo
+    (azul no ícone, transparente no monocromático) aparece por dentro dele.
+  -->
+  <g stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Escudo. Inset em 11/89 para o traço de 9 caber nos 100 do viewBox. -->
+    <path d="M50 10 L84 18 Q89 19.5 89 25 L89 51 C89 70 73 85 50 92 C27 85 11 70 11 51 L11 25 Q11 19.5 16 18 Z" stroke-width="9"/>
+    <!-- Garfo e folha deslocados 3,5 à esquerda: juntos eles é que ficam
+         centrados no escudo, não cada um por si. -->
+    <g transform="translate(-3.5,0)">
+      <path d="M33 31 V47 M39.5 31 V47 M46 31 V47" stroke-width="4"/>
+      <path d="M33 46.5 H46" stroke-width="4"/>
+      <path d="M39.5 46 V72" stroke-width="5.5"/>
+    </g>
+  </g>
+  <path transform="translate(-3.5,0)" d="M55 74 C55 57 62 46 77 41 C77 58 70 69 55 74 Z" fill="currentColor"/>
+</svg>
