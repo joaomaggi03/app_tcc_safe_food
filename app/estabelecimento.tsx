@@ -22,6 +22,7 @@ import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
+  apagarDiariaDeHoje,
   contarCatalogo,
   listarItensOcultos,
   listarPerfis,
@@ -31,7 +32,7 @@ import {
   type ItemOculto,
   type ResumoPerfil,
 } from '../db/consultas';
-import { alertasDisponiveis, testarAlerta } from '../db/notificacoes';
+import { alertasDisponiveis, reagendarAlertas, testarAlerta } from '../db/notificacoes';
 import {
   definirIntervaloPeriodico,
   obterEstabelecimentoAtualizado,
@@ -258,6 +259,9 @@ function Periodicidade({
       </View>
 
       <BotaoTestarAlerta estabelecimento={estabelecimento} />
+      {/* `__DEV__` é true só com o app rodando pelo Metro (Expo Go ou
+          development build). No app instalado de verdade, some. */}
+      {__DEV__ ? <BotaoRefazerDiaria estabelecimento={estabelecimento} /> : null}
     </View>
   );
 }
@@ -306,6 +310,51 @@ function BotaoTestarAlerta({ estabelecimento }: { estabelecimento: Estabelecimen
     >
       <Ionicons name="notifications-outline" size={15} color={Cores.primariaTexto} />
       <Text style={estilos.testarTexto}>Testar alerta agora</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * FERRAMENTA DE TESTE: apaga a diária de hoje para poder refazê-la.
+ *
+ * Só aparece em modo de desenvolvimento. Existe porque o app permite uma
+ * diária por dia, e testar a rotina (ou demonstrá-la na banca) mais de
+ * uma vez no mesmo dia seria impossível sem mexer na data do celular —
+ * o que gravaria inspeções no futuro.
+ */
+function BotaoRefazerDiaria({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+      onPress={() =>
+        Alert.alert(
+          'Refazer a diária de hoje?',
+          'Apaga a inspeção diária de hoje, as respostas dela e as ações que ela gerou no plano. É uma ferramenta de teste: só aparece em modo de desenvolvimento.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Apagar',
+              style: 'destructive',
+              onPress: () => {
+                const apagadas = apagarDiariaDeHoje(estabelecimento.id);
+                // A diária voltou a estar pendente: o alerta de vencimento muda.
+                void reagendarAlertas(estabelecimento);
+                if (apagadas > 0) {
+                  router.replace('/');
+                } else {
+                  Alert.alert('Nada a apagar', 'Ainda não há diária de hoje.');
+                }
+              },
+            },
+          ],
+        )
+      }
+      accessibilityRole="button"
+    >
+      <Ionicons name="refresh-outline" size={15} color={Cores.primariaTexto} />
+      <Text style={estilos.testarTexto}>Refazer a diária de hoje (teste)</Text>
     </Pressable>
   );
 }
