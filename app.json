@@ -16,15 +16,24 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.joaolucasmaggi.apptcc"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-notifications",
+      "expo-font"
     ],
-    "scheme": "apptcc"
+    "scheme": "apptcc",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8db2a111-fb5e-4f5d-8035-3faf28c3a35e"
+      }
+    }
   }
 }
