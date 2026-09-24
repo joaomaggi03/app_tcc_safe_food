@@ -17,6 +17,7 @@ import type {
   Resposta,
   Score,
   Sequencia,
+  SituacaoAcao,
   Trilha,
 } from '../db/consultas';
 import type { GrupoRdc275 } from '../db/faixa';
@@ -282,6 +283,43 @@ export function textoUltimaConclusao(status: StatusTrilha): string {
 export function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.slice(0, 10).split('-');
   return `${dia}/${mes}/${ano}`;
+}
+
+// ---------------------------------------------------------------
+// PLANO DE AÇÃO (RF07)
+// ---------------------------------------------------------------
+
+/** O nome do atalho de prazo no formulário. */
+export function rotuloAtalhoPrazo(dias: number): string {
+  if (dias === 0) return 'Hoje';
+  if (dias === 1) return 'Amanhã';
+  return `Em ${dias} dias`;
+}
+
+/**
+ * A linha de prazo de uma ação: "Atrasada há 2 dias", "Vence hoje",
+ * "Até 27/09/2026".
+ *
+ * A concluída não fala de prazo: depois de resolvida, lembrar que
+ * passou do dia só pune quem registrou a correção.
+ */
+export function textoPrazoAcao(acao: {
+  situacao: SituacaoAcao;
+  diasParaPrazo: number | null;
+  prazo: string;
+}): string {
+  switch (acao.situacao) {
+    case 'concluida':
+      return 'Concluída';
+    case 'atrasada': {
+      const atraso = Math.abs(acao.diasParaPrazo ?? 0);
+      return `Atrasada há ${atraso} ${atraso === 1 ? 'dia' : 'dias'}`;
+    }
+    case 'vence_hoje':
+      return 'Vence hoje';
+    case 'no_prazo':
+      return acao.diasParaPrazo === 1 ? 'Vence amanhã' : `Até ${formatarData(acao.prazo)}`;
+  }
 }
 
 /** Data ISO do banco -> 'DD/MM/AAAA às HH:MM' (hora local do aparelho). */

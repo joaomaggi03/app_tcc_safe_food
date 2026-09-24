@@ -56,7 +56,12 @@ function cenario(respostas) {
   );
 
   for (const [item, resposta] of Object.entries(respostas)) {
-    db.runSync('INSERT INTO resposta VALUES (1, ?, ?, ?)', item, resposta, 'x');
+    db.runSync(
+      'INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em) VALUES (1, ?, ?, ?)',
+      item,
+      resposta,
+      'x',
+    );
   }
 
   return db;
@@ -160,4 +165,19 @@ test('ocultar um item depois não altera o score já registrado', () => {
   db.runSync("INSERT INTO item_oculto VALUES (1,'n1','2026-09-08T10:00:00.000Z')");
 
   assert.equal(score(somas(db)), antes, 'o score de arquivo é imutável');
+});
+
+/**
+ * CORRIGIDO NA HORA (schema v9) não mexe no score: o item estava
+ * inadequado no momento da inspeção, e a correção imediata não apaga
+ * isso. Ela muda só o plano de ação.
+ */
+test('"corrigido na hora" não muda o score', () => {
+  const db = cenario({ c1: 'inadequado', n1: 'adequado' });
+  const antes = score(somas(db));
+
+  db.runSync("UPDATE resposta SET corrigido_na_hora = 1 WHERE item_id = 'c1'");
+
+  assert.equal(score(somas(db)), antes);
+  assert.equal(antes, 25, 'comum adequado (peso 1) sobre crítico + comum (3 + 1)');
 });

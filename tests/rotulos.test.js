@@ -84,3 +84,28 @@ test('toda resposta e toda trilha têm rótulo — nenhuma cai como undefined', 
     assert.ok(rotulos.ROTULO_SITUACAO[situacao], `situação sem rótulo: ${situacao}`);
   }
 });
+
+// ---------------------------------------------------------------
+// PLANO DE AÇÃO
+// ---------------------------------------------------------------
+
+test('o prazo da ação fala em atraso, hoje, amanhã ou data', () => {
+  const { textoPrazoAcao } = rotulos;
+  const prazo = '2026-09-27';
+
+  assert.equal(textoPrazoAcao({ situacao: 'atrasada', diasParaPrazo: -1, prazo }), 'Atrasada há 1 dia');
+  assert.equal(textoPrazoAcao({ situacao: 'atrasada', diasParaPrazo: -3, prazo }), 'Atrasada há 3 dias');
+  assert.equal(textoPrazoAcao({ situacao: 'vence_hoje', diasParaPrazo: 0, prazo }), 'Vence hoje');
+  assert.equal(textoPrazoAcao({ situacao: 'no_prazo', diasParaPrazo: 1, prazo }), 'Vence amanhã');
+  assert.equal(textoPrazoAcao({ situacao: 'no_prazo', diasParaPrazo: 7, prazo }), 'Até 27/09/2026');
+});
+
+test('a ação concluída não fala de prazo', () => {
+  // Resolvida fora do prazo continua resolvida: lembrar o atraso depois
+  // só pune quem registrou a correção.
+  const { textoPrazoAcao } = rotulos;
+  assert.equal(
+    textoPrazoAcao({ situacao: 'concluida', diasParaPrazo: null, prazo: '2026-01-01' }),
+    'Concluída',
+  );
+});

@@ -150,6 +150,18 @@ export default function LayoutRaiz() {
           name="resultado"
           options={{ href: null, title: 'Resultado' }}
         />
+
+        {/* O plano de ação corretiva (RF07), aberto pela aba Conformidade. */}
+        <Tabs.Screen
+          name="plano-acao"
+          options={{ href: null, title: 'Plano de ação' }}
+        />
+
+        {/* Criar ou editar UMA ação — `?item=` e, se veio de uma inspeção, `&inspecao=`. */}
+        <Tabs.Screen
+          name="acao"
+          options={{ href: null, title: 'Ação corretiva' }}
+        />
       </Tabs>
     </>
   );

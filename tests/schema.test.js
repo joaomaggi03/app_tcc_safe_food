@@ -52,6 +52,7 @@ test('instalação nova cria o schema inteiro', () => {
     'inspecao',
     'resposta',
     'item_oculto',
+    'acao',
     'meta',
   ]) {
     assert.ok(tabelas(db).includes(esperada), `faltou a tabela ${esperada}`);
@@ -108,7 +109,10 @@ test('atualizar de qualquer versão anterior preserva os dados do usuário', () 
         `INSERT INTO inspecao (estabelecimento_id, trilha, data_inicio, status)
          VALUES (1,'diario','2026-08-02T10:00:00.000Z','concluida')`,
       );
-      db.runSync("INSERT INTO resposta VALUES (1,'i1','adequado','2026-08-02T10:01:00.000Z')");
+      db.runSync(
+        `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em)
+         VALUES (1,'i1','adequado','2026-08-02T10:01:00.000Z')`,
+      );
       db.runSync("INSERT INTO item_oculto VALUES (1,'i1','2026-08-02T10:02:00.000Z')");
     }
 
@@ -155,6 +159,12 @@ function migrarAte(db, alvo) {
   for (let v = 1; v <= alvo; v++) {
     const bloco = new RegExp('const SCHEMA_V' + v + ' = `([\\s\\S]*?)`;').exec(fonte);
     assert.ok(bloco, `bloco SCHEMA_V${v} não encontrado em db/schema.ts`);
+
+    // A v7 é um REPARO com guarda (ver o SCHEMA_V7): o `migrar()` só a
+    // executa se a coluna da v6 faltar. Repetir a guarda aqui é o que
+    // deixa este auxiliar subir ALÉM da v7 como um aparelho de verdade.
+    if (v === 7 && colunas(db, 'estabelecimento').includes('dias_funcionamento')) continue;
+
     db.execSync(bloco[1]);
   }
   db.execSync(`PRAGMA user_version = ${alvo}`);
@@ -182,7 +192,10 @@ test('as travas CHECK barram valores inválidos', () => {
   );
 
   assert.throws(
-    () => db.runSync("INSERT INTO resposta VALUES (1,'i1','talvez','x')"),
+    () =>
+      db.runSync(
+        "INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em) VALUES (1,'i1','talvez','x')",
+      ),
     /CHECK|FOREIGN/,
     'resposta fora das quatro do RF06 deve ser rejeitada',
   );
@@ -355,4 +368,131 @@ test('a v7 não faz nada em quem já tem a coluna', () => {
 
   assert.doesNotThrow(() => migrar(db), 'a v7 não pode tentar criar a coluna de novo');
   assert.equal(versao(db), VERSAO_SCHEMA);
+});
+
+// ---------------------------------------------------------------
+// PLANO DE AÇÃO (schema v8)
+// ---------------------------------------------------------------
+
+/** Banco migrado e semeado, com um estabelecimento e uma inspeção. */
+function bancoComInspecao() {
+  const db = bancoVazio();
+  migrar(db);
+  semear(db);
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Padaria do Zé','padaria','2026-08-01',30)`,
+  );
+  db.runSync(
+    `INSERT INTO inspecao (estabelecimento_id, trilha, data_inicio, status)
+     VALUES (1,'diario','2026-09-20T10:00:00.000Z','concluida')`,
+  );
+  const item = db.getFirstSync('SELECT id FROM item ORDER BY ordem LIMIT 1').id;
+  return { db, item };
+}
+
+function criarAcao(db, item, status = 'aberta') {
+  db.runSync(
+    `INSERT INTO acao (estabelecimento_id, item_id, inspecao_id, descricao, prazo, status, criada_em)
+     VALUES (1, ?, 1, 'Trocar a borracha da geladeira', '2026-09-27', ?, '2026-09-20T10:00:00.000Z')`,
+    item,
+    status,
+  );
+}
+
+test('só pode haver UMA ação aberta por item no estabelecimento', () => {
+  // O mesmo item inadequado em cinco diárias seguidas continua sendo uma
+  // coisa só a consertar — o índice único parcial é quem garante.
+  const { db, item } = bancoComInspecao();
+  criarAcao(db, item);
+  assert.throws(() => criarAcao(db, item), /UNIQUE/);
+});
+
+test('depois de concluída, o mesmo item pode ganhar uma ação nova', () => {
+  // Corrigido em março, quebrou de novo em setembro: é outra ação.
+  const { db, item } = bancoComInspecao();
+  criarAcao(db, item, 'concluida');
+  assert.doesNotThrow(() => criarAcao(db, item));
+  assert.equal(db.getFirstSync('SELECT COUNT(*) AS n FROM acao').n, 2);
+});
+
+test('ação sem descrição é barrada pelo próprio banco', () => {
+  const { db, item } = bancoComInspecao();
+  assert.throws(
+    () =>
+      db.runSync(
+        `INSERT INTO acao (estabelecimento_id, item_id, descricao, prazo, criada_em)
+         VALUES (1, ?, '   ', '2026-09-27', '2026-09-20T10:00:00.000Z')`,
+        item,
+      ),
+    /CHECK/,
+  );
+});
+
+test('apagar a inspeção de origem não apaga a ação', () => {
+  const { db, item } = bancoComInspecao();
+  criarAcao(db, item);
+  db.runSync('DELETE FROM inspecao WHERE id = 1');
+
+  const linha = db.getFirstSync('SELECT inspecao_id FROM acao');
+  assert.ok(linha, 'a ação continua existindo');
+  assert.equal(linha.inspecao_id, null, 'só perde a referência à origem');
+});
+
+test('recarregar a norma não apaga as ações', () => {
+  // O seed usa INSERT OR REPLACE no item. É o teste que garante que a
+  // troca da linha não leva junto o que o usuário escreveu.
+  const { db, item } = bancoComInspecao();
+  criarAcao(db, item);
+
+  semear(db);
+
+  assert.equal(db.getFirstSync('SELECT COUNT(*) AS n FROM acao').n, 1);
+});
+
+test('a atualização da v7 cria a tabela de ações sem tocar no resto', () => {
+  const db = bancoVazio();
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 7);
+  db.runSync("INSERT INTO perfil VALUES ('feirante','Feirante','d',30,1)");
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Banca do Zé','feirante','2026-08-01',30)`,
+  );
+
+  migrar(db);
+
+  assert.ok(tabelas(db).includes('acao'));
+  assert.equal(versao(db), VERSAO_SCHEMA);
+  assert.equal(db.getFirstSync('SELECT nome FROM estabelecimento').nome, 'Banca do Zé');
+});
+
+test('a v9 acrescenta corrigido_na_hora, com zero nas respostas antigas', () => {
+  const db = bancoVazio();
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 8);
+  db.runSync("INSERT INTO perfil VALUES ('restaurante','R','d',30,1)");
+  db.runSync("INSERT INTO categoria VALUES ('c','C','4.1',0,1)");
+  db.runSync(
+    `INSERT INTO item (id, categoria_id, codigo_rdc, texto, frequencia, ordem)
+     VALUES ('i1','c','4.1.1','t','diario',1)`,
+  );
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('T','restaurante','2026-09-01',30)`,
+  );
+  db.runSync(
+    `INSERT INTO inspecao (estabelecimento_id, trilha, data_inicio, status)
+     VALUES (1,'diario','2026-09-10T10:00:00.000Z','concluida')`,
+  );
+  db.runSync(
+    `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em)
+     VALUES (1,'i1','inadequado','x')`,
+  );
+
+  migrar(db);
+
+  assert.equal(versao(db), VERSAO_SCHEMA);
+  assert.equal(db.getFirstSync('SELECT corrigido_na_hora AS c FROM resposta').c, 0);
+  assert.throws(() => db.runSync('UPDATE resposta SET corrigido_na_hora = 2'), /CHECK/);
 });

@@ -16,13 +16,15 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   obterResumoInspecao,
+  pendenciasDaInspecao,
   PESO_CRITICO,
   scorePorCategoria,
+  type Pendencia,
   type ResumoInspecao,
   type Score,
   type ScoreCategoria,
@@ -33,6 +35,7 @@ import Cores from '../theme/cores';
 import {
   FAIXA_GRUPO,
   faixaDoScore,
+  formatarData,
   formatarDataHora,
   ROTULO_GRUPO,
   ROTULO_MODO,
@@ -72,6 +75,18 @@ export default function TelaResultado() {
     return { inspecao, categorias: scorePorCategoria(inspecaoId) };
   }, [inspecaoId]);
 
+  /**
+   * Os itens inadequados e a ação de cada um. Fora do `useMemo` de cima
+   * porque MUDAM enquanto a tela existe: criar a ação de um item, no
+   * formulário, e voltar aqui tem que trocar o "Criar ação" pelo prazo.
+   */
+  const [pendencias, setPendencias] = useState<Pendencia[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      if (Number.isFinite(inspecaoId)) setPendencias(pendenciasDaInspecao(inspecaoId));
+    }, [inspecaoId]),
+  );
+
   if (!dados) {
     return <Redirect href="/conformidade" />;
   }
@@ -82,6 +97,15 @@ export default function TelaResultado() {
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
       <Cartao inspecao={inspecao} />
       <Criticos score={inspecao.score} />
+      <ItensACorrigir
+        pendencias={pendencias}
+        aoAbrir={(itemId) =>
+          router.push(
+            `/acao?item=${encodeURIComponent(itemId)}&inspecao=${inspecao.id}&origem=resultado`,
+          )
+        }
+        aoVerPlano={() => router.push('/plano-acao')}
+      />
       <Classificacao inspecao={inspecao} />
       <Cobertura inspecao={inspecao} />
       <PorCategoria categorias={categorias} />
@@ -180,6 +204,90 @@ function Criticos({ score }: { score: Score }) {
           ? 'Todos os itens de maior risco sanitário estão adequados.'
           : `${falhas} ${falhas === 1 ? 'item crítico está inadequado' : 'itens críticos estão inadequados'}. São os que oferecem risco direto à saúde — trate-os antes dos demais.`}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * ITENS A CORRIGIR — a ponte entre o diagnóstico e o plano de ação (RF07).
+ *
+ * Lista o que ficou inadequado nesta inspeção, críticos primeiro, com o
+ * prazo da ação de cada um. As ações já foram GERADAS pelo app ao
+ * concluir (ver `gerarAcoesDaInspecao`); um toque abre a ação para o
+ * usuário ajustar o texto ou o prazo.
+ *
+ * O que foi CORRIGIDO NA HORA, na diária, não tem ação — e a linha diz
+ * isso, em vez de oferecer uma. Continua listado porque continua sendo
+ * inadequado: a correção imediata não apaga o que a inspeção viu.
+ *
+ * "Criar ação" só aparece em inspeções concluídas antes de o app gerar o
+ * plano sozinho, ou quando o usuário excluiu a ação gerada.
+ */
+function ItensACorrigir({
+  pendencias,
+  aoAbrir,
+  aoVerPlano,
+}: {
+  pendencias: Pendencia[];
+  aoAbrir: (itemId: string) => void;
+  aoVerPlano: () => void;
+}) {
+  if (pendencias.length === 0) return null;
+
+  const corrigidas = pendencias.filter((p) => p.corrigido_na_hora === 1 && p.acao_id === null);
+  const semAcao = pendencias.filter(
+    (p) => p.acao_id === null && p.corrigido_na_hora !== 1,
+  ).length;
+
+  return (
+    <View style={estilos.cartao}>
+      <View style={estilos.linhaTitulo}>
+        <Ionicons name="construct-outline" size={18} color={Cores.textoSecundario} />
+        <Text style={estilos.tituloCartao}>Itens a corrigir</Text>
+        <Text style={estilos.contagemPendencias}>{pendencias.length}</Text>
+      </View>
+      <Text style={estilos.notaCartao}>
+        {semAcao > 0
+          ? 'Toque num item para criar a ação corretiva dele.'
+          : corrigidas.length === pendencias.length
+            ? 'Todos foram corrigidos na hora — nenhum precisou ir para o plano de ação.'
+            : 'O app gerou uma ação corretiva para o que não foi corrigido na hora. Toque num item para dizer como vai resolver ou mudar o prazo.'}
+      </Text>
+
+      {pendencias.map((pendencia) => (
+        <Pressable
+          key={pendencia.item_id}
+          onPress={() => aoAbrir(pendencia.item_id)}
+          style={({ pressed }) => [estilos.pendencia, pressed && estilos.pressionado]}
+          accessibilityRole="button"
+        >
+          <View style={estilos.flex}>
+            <View style={estilos.linhaPendencia}>
+              <Text style={estilos.codigoPendencia}>{pendencia.codigo_rdc}</Text>
+              {pendencia.critico === 1 ? (
+                <Text style={estilos.criticoPendencia}>Crítico</Text>
+              ) : null}
+            </View>
+            <Text style={estilos.resumoPendencia} numberOfLines={2}>
+              {pendencia.topicos[0] ?? pendencia.texto}
+            </Text>
+          </View>
+
+          {pendencia.acao_prazo ? (
+            <Text style={estilos.acaoExistente}>até {formatarData(pendencia.acao_prazo)}</Text>
+          ) : pendencia.corrigido_na_hora === 1 ? (
+            <Text style={estilos.corrigidoNaHora}>Corrigido na hora</Text>
+          ) : (
+            <Text style={estilos.criarAcao}>Criar ação</Text>
+          )}
+          <Ionicons name="chevron-forward" size={16} color={Cores.textoSuave} />
+        </Pressable>
+      ))}
+
+      <Pressable onPress={aoVerPlano} style={estilos.verPlano} accessibilityRole="button">
+        <Text style={estilos.verPlanoTexto}>Ver o plano de ação</Text>
+        <Ionicons name="chevron-forward" size={14} color={Cores.primariaTexto} />
+      </Pressable>
     </View>
   );
 }
@@ -372,6 +480,35 @@ const estilos = StyleSheet.create({
   criticoOk: { borderColor: Cores.primaria },
   criticoAlerta: { borderColor: Cores.acento },
   linhaTitulo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  contagemPendencias: { fontSize: 15, fontWeight: '700', color: Cores.acentoTexto },
+  pendencia: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: Cores.divisor,
+    marginTop: 4,
+  },
+  flex: { flex: 1 },
+  linhaPendencia: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  codigoPendencia: { fontSize: 11, fontWeight: '700', color: Cores.textoSecundario },
+  criticoPendencia: { fontSize: 11, fontWeight: '700', color: Cores.acentoTexto },
+  resumoPendencia: { fontSize: 14, lineHeight: 20, color: Cores.texto, marginTop: 2 },
+  criarAcao: { fontSize: 13, fontWeight: '700', color: Cores.primariaTexto },
+  acaoExistente: { fontSize: 12, color: Cores.textoSecundario },
+  corrigidoNaHora: { fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
+  verPlano: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Cores.divisor,
+  },
+  verPlanoTexto: { fontSize: 13, fontWeight: '700', color: Cores.primariaTexto },
   tituloCartao: { flex: 1, fontSize: 15, fontWeight: '700', color: Cores.texto },
   notaCartao: { fontSize: 13, lineHeight: 20, color: Cores.textoSecundario, marginTop: 8 },
 

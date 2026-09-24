@@ -246,8 +246,69 @@ exportação em PDF (RF08).
     segunda marca poderia discordar dela.
   - Zero dia marcado trava o botão de salvar do cadastro: sem expediente não
     há rotina diária e toda conta de prazo perde o chão.
+- **Plano de ação corretiva — RF07 (schemas v8 e v9, feito).** Feito antes da
+  Fase 6 por decisão do autor: fecha o ciclo "inspeciono → vejo o que falhou
+  → sei o que fazer" sem depender de rede, e a Fase 6 pode virar trabalho
+  futuro.
+  - **Tabela `acao`**: o que fazer (`descricao`) e até quando (`prazo`, dia
+    local). É conteúdo do usuário, então é gravada; a **situação** (atrasada
+    / vence hoje / no prazo) é DERIVADA, em `db/acao.ts` — módulo puro,
+    padrão do `vencimento.ts`, testado em `tests/acao.test.js`.
+  - **Uma ação ABERTA por item e estabelecimento**, garantida por índice
+    único parcial (`WHERE status = 'aberta'`). O mesmo item inadequado em
+    cinco diárias é uma coisa só a consertar; depois de concluída, o item
+    pode ganhar ação nova. `salvarAcao` cria ou atualiza a aberta — o
+    formulário é um só para criar e editar.
+  - **O APP GERA O PLANO.** Ao concluir a inspeção (`concluirInspecao` →
+    `gerarAcoesDaInspecao`), cada item inadequado sem ação aberta ganha uma,
+    com prazo sugerido. `INSERT OR IGNORE` + o índice único: a segunda
+    geração para o mesmo item é ignorada e não sobrescreve o que o usuário
+    ajustou. (Começou como "sugerida, um toque cria"; o autor mudou para
+    automática — o "Criar ação" manual ficou só para inspeções antigas ou
+    ação excluída.)
+  - **Correção imediata ≠ ação corretiva (schema v9).** Gerar ação para
+    todo inadequado da DIÁRIA enchia o plano de coisas resolvidas no
+    momento (touca, bancada suja). A área de segurança de alimentos separa
+    correção imediata de ação corretiva planejada, e o plano é para a
+    segunda. Por isso o inadequado da diária tem "Corrigi na hora"
+    (`resposta.corrigido_na_hora`); marcado, não vira ação. Regras puras
+    em `db/acao.ts`: `aceitaCorrecaoNaHora` (só a diária — periódica e
+    semestral são estruturais) e `precisaDeAcao`, que ignora a marca fora
+    da diária mesmo que ela chegue ao banco.
+    - **O score NÃO muda** com a marca: o item estava inadequado no
+      momento, e esconder isso do número seria maquiar a inspeção
+      (testado em `tests/score.test.js`).
+    - A marca mora NA RESPOSTA, não numa ação concluída na hora: é um fato
+      da inspeção. Sair de "inadequado" apaga a marca — no upsert do
+      `salvarResposta` e na tela.
+    - A v9 acrescentou coluna em `resposta`: os testes que faziam
+      `INSERT INTO resposta VALUES (...)` sem nomear colunas quebraram e
+      foram corrigidos. **Sempre nomeie as colunas.**
+  - **O texto gerado diz O QUE atingir, não COMO consertar:**
+    `descricaoGerada` = "Adequar ao item X da RDC 216: <tópicos>". O "como"
+    (trocar a borracha, chamar o técnico) depende do caso e não está na
+    norma; escrevê-lo seria inventar conteúdo técnico (regra 4). O usuário
+    edita para acrescentar. Se um dia houver orientação de correção por
+    item, ela entra como DADO revisado em `data/rdc216.ts`, não em código.
+  - **Outras decisões do autor:** **só dois campos**; e o encerramento é
+    **manual, com sugestão** — se o item sai adequado numa inspeção POSTERIOR à criação,
+    o plano sugere concluir, mas não conclui sozinho (uma diária rápida não
+    prova que a obra foi feita). A sugestão olha a ÚLTIMA avaliação do item;
+    "não observado" não conta como avaliação. Testado sobre o SQL real em
+    `tests/acao-consultas.test.js`.
+  - **Prazo sugerido é decisão do app:** crítico → hoje, demais → 7 dias
+    (`PRAZO_PADRAO_CRITICO`, `PRAZO_PADRAO`). Atalhos: hoje / 7 / 30 dias,
+    empurrados para o próximo dia ABERTO pela máscara de funcionamento.
+  - Telas: `app/acao.tsx` (formulário), `app/plano-acao.tsx` (atrasadas →
+    abertas → concluídas dos últimos 30 dias), seção "Itens a corrigir" em
+    `app/resultado.tsx`, cartão "Plano de ação" na aba Conformidade.
+  - **As rotas escondidas das abas continuam montadas** depois que se sai
+    delas: o formulário usa um contador de foco como `key` para nascer de
+    novo a cada visita, senão traria o texto digitado no item anterior.
+  - Fora desta entrega: alerta de prazo de ação (`expo-notifications`) e
+    ação atrasada no prelúdio da aba Hoje.
 - **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
-  Fora do núcleo: plano de ação corretiva (RF07) e exportação em PDF (RF08).
+  Fora do núcleo: exportação em PDF (RF08).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
   Histórico. Dois defeitos: o cartão de prazos do Início listava as três
   trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de

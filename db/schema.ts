@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 7;
+export const VERSAO_SCHEMA = 9;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -285,6 +285,66 @@ const SCHEMA_V7 = `
   ALTER TABLE estabelecimento ADD COLUMN dias_funcionamento TEXT;
 `;
 
+/**
+ * v8: O PLANO DE AÇÃO CORRETIVA (RF07).
+ *
+ * Uma linha por ação: o que o usuário vai fazer para corrigir um item
+ * que ficou inadequado, e até quando. É conteúdo do usuário, por isso é
+ * gravado; a situação (atrasada, vence hoje) é DERIVADA do prazo, em
+ * `db/acao.ts`, e não tem coluna.
+ *
+ * - `item_id` e não `resposta`: a ação corrige o ITEM no estabelecimento.
+ *   Se o mesmo item sai inadequado em cinco diárias seguidas, continua
+ *   sendo uma coisa só a consertar.
+ * - `inspecao_id` é só a origem (de qual inspeção a ação saiu). Fica
+ *   NULL se a inspeção for apagada, sem levar a ação junto.
+ * - `prazo` é DIA LOCAL, como `inspecao.dia_local`: prazo é "até sexta",
+ *   não um instante em UTC.
+ *
+ * O ÍNDICE ÚNICO PARCIAL é a regra "uma ação ABERTA por item": o SQLite
+ * recusa a segunda. As concluídas ficam fora dele — o mesmo item pode ter
+ * sido corrigido em março e voltar a precisar de ação em setembro.
+ */
+const SCHEMA_V8 = `
+  CREATE TABLE IF NOT EXISTS acao (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    estabelecimento_id  INTEGER NOT NULL REFERENCES estabelecimento(id) ON DELETE CASCADE,
+    item_id             TEXT    NOT NULL REFERENCES item(id),
+    inspecao_id         INTEGER REFERENCES inspecao(id) ON DELETE SET NULL,
+    descricao           TEXT    NOT NULL CHECK (length(trim(descricao)) > 0),
+    prazo               TEXT    NOT NULL,
+    status              TEXT    NOT NULL DEFAULT 'aberta'
+                          CHECK (status IN ('aberta', 'concluida')),
+    criada_em           TEXT    NOT NULL,
+    concluida_em        TEXT
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_acao_aberta_por_item
+    ON acao (estabelecimento_id, item_id) WHERE status = 'aberta';
+`;
+
+/**
+ * v9: CORRIGIDO NA HORA — a correção imediata, na diária.
+ *
+ * Boa parte do que sai inadequado numa diária se resolve no momento:
+ * funcionário sem touca, bancada suja, alimento fora da geladeira. Isso é
+ * CORREÇÃO IMEDIATA, e não pede ação planejada com prazo. O plano de ação
+ * (RF07) é para o que precisa de tempo, dinheiro ou terceiros.
+ *
+ * A marca fica NA RESPOSTA, e não numa ação concluída na hora, porque o
+ * que ela registra é um fato da inspeção: "estava inadequado, e foi
+ * corrigido ali". Por isso o SCORE NÃO MUDA — o item estava inadequado
+ * naquele momento, e esconder isso do número seria maquiar a inspeção.
+ *
+ * 0/1, como `item.critico`. Coluna nova no FIM da tabela (ALTER TABLE):
+ * todo INSERT em `resposta` precisa nomear as colunas.
+ */
+const SCHEMA_V9 = `
+  ALTER TABLE resposta
+    ADD COLUMN corrigido_na_hora INTEGER NOT NULL DEFAULT 0
+      CHECK (corrigido_na_hora IN (0, 1));
+`;
+
 /** Essa tabela já tem essa coluna? */
 function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
   return db
@@ -333,6 +393,14 @@ export function migrar(db: SQLiteDatabase): void {
     if (!temColuna(db, 'estabelecimento', 'dias_funcionamento')) {
       db.execSync(SCHEMA_V7);
     }
+  }
+
+  if (versaoAtual < 8) {
+    db.execSync(SCHEMA_V8);
+  }
+
+  if (versaoAtual < 9) {
+    db.execSync(SCHEMA_V9);
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

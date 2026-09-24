@@ -9,6 +9,16 @@
 
 import type { MomentoDia } from '../data/rdc216';
 import { ROTINA_DIARIA } from '../data/rotina-diaria';
+import {
+  descricaoGerada,
+  ordenarAcoes,
+  prazoDoAtalho,
+  prazoPadraoEmDias,
+  precisaDeAcao,
+  situacaoAcao,
+  type SituacaoAcao,
+  type StatusAcao,
+} from './acao';
 import { diaLocalHaDias, diaLocalISO } from './datas';
 import { atendimentoDosItens } from './faixa';
 import { normalizarFuncionamento } from './funcionamento';
@@ -18,6 +28,7 @@ import { calcularSequencia, type Sequencia } from './sequencia';
 // Reexportado para as telas não precisarem importar de dois lugares.
 export type { MomentoDia };
 export type { DiaDaSequencia, Sequencia, SituacaoSequencia } from './sequencia';
+export type { SituacaoAcao, StatusAcao } from './acao';
 
 // ---------------------------------------------------------------
 // CATÁLOGO DA NORMA
@@ -322,13 +333,16 @@ type LinhaItem = Omit<ItemChecklist, 'topicos'> & { topicos: string | null };
  * derrubar a tela.
  */
 function comTopicos(linha: LinhaItem): ItemChecklist {
-  let topicos: string[] = [];
+  return { ...linha, topicos: topicosDoJson(linha.topicos) };
+}
+
+/** A coluna `item.topicos` (JSON) como lista; vazia ou ilegível vira []. */
+function topicosDoJson(json: string | null): string[] {
   try {
-    topicos = linha.topicos ? (JSON.parse(linha.topicos) as string[]) : [];
+    return json ? (JSON.parse(json) as string[]) : [];
   } catch {
-    topicos = [];
+    return [];
   }
-  return { ...linha, topicos };
 }
 
 /** Títulos dos blocos da trilha diária, na ordem do expediente. */
@@ -767,6 +781,38 @@ export function iniciarInspecao(
  * linha — procurar numa lista de 80 itens a cada redesenho seria
  * desperdício.
  */
+/**
+ * Marca (ou desmarca) um item inadequado como CORRIGIDO NA HORA (schema v9).
+ *
+ * Só vale para resposta inadequada — o `AND resposta = 'inadequado'`
+ * garante isso no próprio banco, e não só na tela. Não muda o score: o
+ * item estava inadequado naquele momento. Muda só o plano de ação, que
+ * deixa de gerar ação para ele.
+ */
+export function marcarCorrigidoNaHora(
+  inspecaoId: number,
+  itemId: string,
+  corrigido: boolean,
+): void {
+  obterBanco().runSync(
+    `UPDATE resposta SET corrigido_na_hora = ?
+      WHERE inspecao_id = ? AND item_id = ? AND resposta = 'inadequado'`,
+    corrigido ? 1 : 0,
+    inspecaoId,
+    itemId,
+  );
+}
+
+/** Os itens marcados como corrigidos na hora nesta inspeção. */
+export function corrigidosNaHora(inspecaoId: number): string[] {
+  return obterBanco()
+    .getAllSync<{ item_id: string }>(
+      'SELECT item_id FROM resposta WHERE inspecao_id = ? AND corrigido_na_hora = 1',
+      inspecaoId,
+    )
+    .map((linha) => linha.item_id);
+}
+
 export function respostasDaInspecao(inspecaoId: number): Record<string, Resposta> {
   const linhas = obterBanco().getAllSync<{ item_id: string; resposta: Resposta }>(
     'SELECT item_id, resposta FROM resposta WHERE inspecao_id = ?',
@@ -806,7 +852,11 @@ export function salvarResposta(
     `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em)
      VALUES (?, ?, ?, ?)
      ON CONFLICT (inspecao_id, item_id)
-     DO UPDATE SET resposta = excluded.resposta, respondida_em = excluded.respondida_em`,
+     DO UPDATE SET resposta = excluded.resposta, respondida_em = excluded.respondida_em,
+                   -- "Corrigido na hora" só existe em inadequado: trocar
+                   -- para outra resposta apaga a marca (schema v9).
+                   corrigido_na_hora = CASE WHEN excluded.resposta = 'inadequado'
+                                            THEN corrigido_na_hora ELSE 0 END`,
     inspecaoId,
     itemId,
     resposta,
@@ -840,7 +890,7 @@ export function salvarResposta(
  * trilha — por isso ela só é gravada aqui, e não a cada resposta.
  */
 export function concluirInspecao(inspecaoId: number, totalItens: number): void {
-  obterBanco().runSync(
+  const resultado = obterBanco().runSync(
     `UPDATE inspecao
         SET status = 'concluida',
             data_conclusao = ?,
@@ -854,6 +904,11 @@ export function concluirInspecao(inspecaoId: number, totalItens: number): void {
     totalItens,
     inspecaoId,
   );
+
+  // O PLANO DE AÇÃO nasce aqui (RF07). Só quando a conclusão aconteceu
+  // de fato: concluir de novo uma inspeção já concluída não muda nada
+  // acima, e também não deve gerar nada.
+  if (resultado.changes > 0) gerarAcoesDaInspecao(inspecaoId);
 }
 
 // ---------------------------------------------------------------
@@ -1350,4 +1405,367 @@ export function sequenciaDiaria(estabelecimento: Estabelecimento): Sequencia {
     diaLocalISO(),
     estabelecimento.dias_funcionamento,
   );
+}
+
+// ---------------------------------------------------------------
+// PLANO DE AÇÃO CORRETIVA (RF07)
+// ---------------------------------------------------------------
+
+/**
+ * Por quantos dias uma ação CONCLUÍDA continua aparecendo no plano.
+ *
+ * O plano é uma lista de trabalho, não um arquivo morto: a concluída
+ * fica um mês à vista, para o usuário ver o que já resolveu, e depois
+ * sai da tela. Continua no banco.
+ */
+export const JANELA_CONCLUIDAS_DIAS = 30;
+
+/** O item como a ação precisa dele: onde está na norma e o resumo. */
+export interface ItemDaAcao {
+  item_id: string;
+  codigo_rdc: string;
+  /** O texto integral da norma, para o "ver texto da norma". */
+  texto: string;
+  topicos: string[];
+  /** 0 ou 1. */
+  critico: number;
+  categoria_nome: string;
+}
+
+/** Um item que ficou INADEQUADO numa inspeção, e a ação dele, se houver. */
+export interface Pendencia extends ItemDaAcao {
+  /** 0 ou 1 — corrigido na hora, na diária (schema v9). Não gera ação. */
+  corrigido_na_hora: number;
+  /** A ação ABERTA para este item, se já existir. */
+  acao_id: number | null;
+  acao_prazo: string | null;
+}
+
+export interface AcaoCorretiva extends ItemDaAcao {
+  id: number;
+  inspecao_id: number | null;
+  descricao: string;
+  /** Dia local, 'AAAA-MM-DD'. */
+  prazo: string;
+  status: StatusAcao;
+  criada_em: string;
+  concluida_em: string | null;
+  /**
+   * A SUGESTÃO DE CONCLUIR: o dia local da inspeção, posterior à
+   * criação da ação, em que o item saiu ADEQUADO. Null quando não houve,
+   * ou quando a última avaliação depois dela ainda foi inadequada.
+   *
+   * O app só sugere — não conclui sozinho. Uma diária rápida que marcou
+   * "adequado" não prova que a obra da parede foi feita.
+   */
+  adequado_em: string | null;
+  /** Derivados do prazo e do dia de hoje — ver `db/acao.ts`. */
+  situacao: SituacaoAcao;
+  diasParaPrazo: number | null;
+}
+
+/** A linha crua do SQL: `topicos` ainda em JSON e sem a situação. */
+type LinhaAcao = Omit<AcaoCorretiva, 'topicos' | 'situacao' | 'diasParaPrazo'> & {
+  topicos: string | null;
+};
+
+/** Qualquer linha com `topicos` ainda em JSON. */
+type ComTopicosJson<T extends { topicos: string[] }> = Omit<T, 'topicos'> & {
+  topicos: string | null;
+};
+
+/**
+ * A leitura das ações, com o item e a sugestão de concluir.
+ *
+ * A subconsulta do `adequado_em` pega a ÚLTIMA avaliação do item
+ * (adequado ou inadequado — "não observado" não diz nada) em inspeção
+ * concluída depois da criação da ação. Só vira sugestão se essa última
+ * for "adequado": adequado na segunda e inadequado na quarta não é
+ * problema resolvido.
+ */
+const SELECT_ACAO = `
+  SELECT a.id, a.item_id, a.inspecao_id, a.descricao, a.prazo, a.status,
+         a.criada_em, a.concluida_em,
+         i.codigo_rdc, i.texto, i.topicos, i.critico,
+         c.nome AS categoria_nome,
+         (SELECT CASE WHEN r.resposta = 'adequado' THEN ins.dia_local END
+            FROM resposta r
+            JOIN inspecao ins ON ins.id = r.inspecao_id
+           WHERE ins.estabelecimento_id = a.estabelecimento_id
+             AND ins.status = 'concluida'
+             AND ins.data_conclusao > a.criada_em
+             AND r.item_id = a.item_id
+             AND r.resposta IN ('adequado', 'inadequado')
+           ORDER BY ins.data_conclusao DESC
+           LIMIT 1) AS adequado_em
+    FROM acao a
+    JOIN item i      ON i.id = a.item_id
+    JOIN categoria c ON c.id = i.categoria_id`;
+
+function comSituacao(linha: LinhaAcao, hoje: string): AcaoCorretiva {
+  const calculo = situacaoAcao(linha, hoje);
+  return {
+    ...linha,
+    topicos: topicosDoJson(linha.topicos),
+    situacao: calculo.situacao,
+    diasParaPrazo: calculo.diasParaPrazo,
+  };
+}
+
+/**
+ * Os itens INADEQUADOS de uma inspeção — o ponto de partida do plano.
+ *
+ * Cada um vem com a ação aberta dele, se já existir: a tela mostra
+ * "criar ação" ou "ação até 27/09", e não oferece criar uma segunda (o
+ * índice único do schema v8 também não deixaria).
+ *
+ * Críticos primeiro, depois na ordem da norma.
+ */
+export function pendenciasDaInspecao(inspecaoId: number): Pendencia[] {
+  const linhas = obterBanco().getAllSync<ComTopicosJson<Pendencia>>(
+    `SELECT r.item_id, r.corrigido_na_hora, i.codigo_rdc, i.texto, i.topicos, i.critico,
+            c.nome AS categoria_nome,
+            a.id AS acao_id, a.prazo AS acao_prazo
+       FROM resposta r
+       JOIN inspecao ins ON ins.id = r.inspecao_id
+       JOIN item i       ON i.id = r.item_id
+       JOIN categoria c  ON c.id = i.categoria_id
+       LEFT JOIN acao a  ON a.estabelecimento_id = ins.estabelecimento_id
+                        AND a.item_id = r.item_id
+                        AND a.status = 'aberta'
+      WHERE r.inspecao_id = ?
+        AND r.resposta = 'inadequado'
+      ORDER BY i.critico DESC, c.ordem, i.ordem`,
+    inspecaoId,
+  );
+  return linhas.map((linha) => ({ ...linha, topicos: topicosDoJson(linha.topicos) }));
+}
+
+/**
+ * GERA O PLANO: uma ação para cada item inadequado da inspeção que ainda
+ * não tem ação aberta — exceto o que foi CORRIGIDO NA HORA na diária.
+ * Chamada por `concluirInspecao`.
+ *
+ * - O texto diz a exigência a atingir (`descricaoGerada`), não como
+ *   consertar — isso o usuário acrescenta.
+ * - O prazo é o sugerido (crítico hoje, demais 7 dias), contado do dia de
+ *   hoje e empurrado para o próximo dia aberto do estabelecimento.
+ * - `INSERT OR IGNORE` + o índice único do schema v8: se o item já tem
+ *   ação aberta (de uma diária anterior, por exemplo), a linha é
+ *   ignorada. O mesmo item inadequado em cinco diárias segue sendo UMA
+ *   ação, com o prazo e o texto que o usuário já tinha ajustado.
+ *
+ * Devolve quantas ações foram criadas.
+ */
+export function gerarAcoesDaInspecao(inspecaoId: number): number {
+  const db = obterBanco();
+  const origem = db.getFirstSync<{
+    estabelecimento_id: number;
+    trilha: Trilha;
+    dias_funcionamento: string | null;
+  }>(
+    `SELECT ins.estabelecimento_id, ins.trilha, e.dias_funcionamento
+       FROM inspecao ins
+       JOIN estabelecimento e ON e.id = ins.estabelecimento_id
+      WHERE ins.id = ?`,
+    inspecaoId,
+  );
+  if (!origem) return 0;
+
+  const hoje = diaLocalISO();
+  // Fica de fora o que já tem ação aberta e o que foi corrigido na hora
+  // (correção imediata não é ação planejada — ver `precisaDeAcao`).
+  const semAcao = pendenciasDaInspecao(inspecaoId).filter(
+    (p) =>
+      p.acao_id === null &&
+      precisaDeAcao({ trilha: origem.trilha, corrigidoNaHora: p.corrigido_na_hora === 1 }),
+  );
+  let criadas = 0;
+
+  db.withTransactionSync(() => {
+    for (const pendencia of semAcao) {
+      const prazo = prazoDoAtalho(
+        hoje,
+        prazoPadraoEmDias(pendencia.critico === 1),
+        origem.dias_funcionamento,
+      );
+      const linha = db.runSync(
+        `INSERT OR IGNORE INTO acao
+           (estabelecimento_id, item_id, inspecao_id, descricao, prazo, criada_em)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        origem.estabelecimento_id,
+        pendencia.item_id,
+        inspecaoId,
+        descricaoGerada(pendencia),
+        prazo,
+        agoraISO(),
+      );
+      criadas += linha.changes;
+    }
+  });
+
+  return criadas;
+}
+
+/** O item, para o formulário de ação mostrar do que se trata. */
+export function obterItemDaAcao(itemId: string): ItemDaAcao | null {
+  const linha = obterBanco().getFirstSync<ComTopicosJson<ItemDaAcao>>(
+    `SELECT i.id AS item_id, i.codigo_rdc, i.texto, i.topicos, i.critico,
+            c.nome AS categoria_nome
+       FROM item i
+       JOIN categoria c ON c.id = i.categoria_id
+      WHERE i.id = ?`,
+    itemId,
+  );
+  return linha ? { ...linha, topicos: topicosDoJson(linha.topicos) } : null;
+}
+
+/** A ação ABERTA de um item, se houver — o formulário a edita em vez de criar outra. */
+export function obterAcaoAberta(estabelecimentoId: number, itemId: string): AcaoCorretiva | null {
+  const linha = obterBanco().getFirstSync<LinhaAcao>(
+    `${SELECT_ACAO}
+      WHERE a.estabelecimento_id = ? AND a.item_id = ? AND a.status = 'aberta'`,
+    estabelecimentoId,
+    itemId,
+  );
+  return linha ? comSituacao(linha, diaLocalISO()) : null;
+}
+
+/**
+ * O plano: as abertas e as concluídas do último mês, já na ordem de
+ * atenção (ver `ordenarAcoes`).
+ */
+export function listarAcoes(estabelecimentoId: number): AcaoCorretiva[] {
+  // `concluida_em` é instante UTC (agoraISO), então o corte também é.
+  const corte = new Date(Date.now() - JANELA_CONCLUIDAS_DIAS * 24 * 60 * 60 * 1000).toISOString();
+  const linhas = obterBanco().getAllSync<LinhaAcao>(
+    `${SELECT_ACAO}
+      WHERE a.estabelecimento_id = ?
+        AND (a.status = 'aberta' OR a.concluida_em >= ?)`,
+    estabelecimentoId,
+    corte,
+  );
+  const hoje = diaLocalISO();
+  return ordenarAcoes(linhas.map((linha) => comSituacao(linha, hoje)));
+}
+
+export interface DadosAcao {
+  estabelecimentoId: number;
+  itemId: string;
+  /** De qual inspeção a ação saiu; null quando criada fora de uma. */
+  inspecaoId: number | null;
+  descricao: string;
+  /** Dia local, 'AAAA-MM-DD'. */
+  prazo: string;
+}
+
+/**
+ * Cria a ação do item — ou, se já houver uma aberta, atualiza ela.
+ *
+ * O formulário é o mesmo para criar e editar, e esta função é quem
+ * decide qual dos dois fazer. Assim a regra "uma aberta por item" nunca
+ * chega a bater no índice único por um toque duplo no botão de salvar.
+ */
+export function salvarAcao(dados: DadosAcao): number {
+  const db = obterBanco();
+  const descricao = dados.descricao.trim();
+  const existente = db.getFirstSync<{ id: number }>(
+    `SELECT id FROM acao WHERE estabelecimento_id = ? AND item_id = ? AND status = 'aberta'`,
+    dados.estabelecimentoId,
+    dados.itemId,
+  );
+
+  if (existente) {
+    db.runSync(
+      'UPDATE acao SET descricao = ?, prazo = ? WHERE id = ?',
+      descricao,
+      dados.prazo,
+      existente.id,
+    );
+    return existente.id;
+  }
+
+  const resultado = db.runSync(
+    `INSERT INTO acao (estabelecimento_id, item_id, inspecao_id, descricao, prazo, criada_em)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    dados.estabelecimentoId,
+    dados.itemId,
+    dados.inspecaoId,
+    descricao,
+    dados.prazo,
+    agoraISO(),
+  );
+  return resultado.lastInsertRowId;
+}
+
+/** Marca como concluída. Só vale para a aberta: concluir de novo não muda a data. */
+export function concluirAcao(acaoId: number): void {
+  obterBanco().runSync(
+    `UPDATE acao SET concluida_em = ?, status = 'concluida' WHERE id = ? AND status = 'aberta'`,
+    agoraISO(),
+    acaoId,
+  );
+}
+
+/** Apaga a ação — para a criada por engano, não para a resolvida (essa se conclui). */
+export function excluirAcao(acaoId: number): void {
+  obterBanco().runSync('DELETE FROM acao WHERE id = ?', acaoId);
+}
+
+export interface ResumoAcoes {
+  abertas: number;
+  /** Abertas com o prazo já passado. */
+  atrasadas: number;
+  /** Abertas cujo item saiu adequado depois — candidatas a concluir. */
+  paraConcluir: number;
+}
+
+/** Os números do cartão do plano na aba Conformidade. */
+export function resumoAcoes(estabelecimentoId: number): ResumoAcoes {
+  const abertas = listarAcoes(estabelecimentoId).filter((acao) => acao.status === 'aberta');
+  return {
+    abertas: abertas.length,
+    atrasadas: abertas.filter((acao) => acao.situacao === 'atrasada').length,
+    paraConcluir: abertas.filter((acao) => acao.adequado_em !== null).length,
+  };
+}
+
+// ---------------------------------------------------------------
+// FERRAMENTA DE TESTE
+// ---------------------------------------------------------------
+
+/**
+ * APAGA A DIÁRIA DE HOJE — só para teste e demonstração.
+ *
+ * O app permite uma diária por dia (ver `iniciarInspecao`), e é isso que
+ * impede uma segunda diária por engano no histórico. Mas testar a rotina
+ * mais de uma vez por dia fica impossível. A tela só oferece isto em
+ * modo de desenvolvimento (`__DEV__`); não chega ao app final.
+ *
+ * Leva junto as AÇÕES que essa diária gerou: sem isso, refazer a diária
+ * encontraria a ação antiga aberta para o mesmo item e não criaria outra
+ * (`INSERT OR IGNORE`), e o teste pareceria errado sem estar. As
+ * respostas vão sozinhas, pelo `ON DELETE CASCADE` do schema v3.
+ *
+ * Devolve quantas diárias foram apagadas.
+ */
+export function apagarDiariaDeHoje(estabelecimentoId: number): number {
+  const db = obterBanco();
+  const ids = db
+    .getAllSync<{ id: number }>(
+      `SELECT id FROM inspecao
+        WHERE estabelecimento_id = ? AND trilha = 'diario' AND dia_local = ?`,
+      estabelecimentoId,
+      diaLocalISO(),
+    )
+    .map((linha) => linha.id);
+
+  db.withTransactionSync(() => {
+    for (const id of ids) {
+      db.runSync('DELETE FROM acao WHERE inspecao_id = ?', id);
+      db.runSync('DELETE FROM inspecao WHERE id = ?', id);
+    }
+  });
+
+  return ids.length;
 }

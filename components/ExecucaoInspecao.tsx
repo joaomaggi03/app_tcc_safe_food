@@ -51,11 +51,14 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { aceitaCorrecaoNaHora } from '../db/acao';
 import {
   checklistDoPerfil,
   concluirInspecao,
+  corrigidosNaHora,
   estadoDaVerificacao,
   iniciarInspecao,
+  marcarCorrigidoNaHora,
   respostasDaInspecao,
   rotinaDoPerfil,
   salvarResposta,
@@ -194,6 +197,21 @@ export function ExecucaoInspecao({
   const [respostas, setRespostas] = useState(() => respostasDaInspecao(inspecao.id));
 
   /**
+   * Os inadequados CORRIGIDOS NA HORA (schema v9) — só na diária.
+   *
+   * Correção imediata não vira ação no plano (RF07): o funcionário sem
+   * touca pôs a touca, e pronto. O item continua inadequado no score,
+   * porque estava inadequado naquele momento.
+   */
+  const podeCorrigirNaHora = aceitaCorrecaoNaHora(trilha);
+  const [corrigidos, setCorrigidos] = useState(() => corrigidosNaHora(inspecao.id));
+
+  // A lista redesenha quando QUALQUER um dos dois muda. O `useMemo` é para
+  // não criar um objeto novo a cada renderização — a rolagem também
+  // renderiza a tela, e isso faria a lista inteira redesenhar à toa.
+  const estadoDaLista = useMemo(() => ({ respostas, corrigidos }), [respostas, corrigidos]);
+
+  /**
    * Quais blocos estão abertos.
    *
    * Começa só com o primeiro: abrir todos devolveria a lista quilométrica
@@ -316,6 +334,11 @@ export function ExecucaoInspecao({
       for (const item of verificacao.itens) novo[item.id] = resposta;
       return novo;
     });
+    // A verificação só responde "conforme" ou "não observado": nenhum dos
+    // dois é inadequado, então a marca de corrigido some (o banco já a
+    // apagou no `salvarResposta`).
+    const ids = new Set(verificacao.itens.map((item) => item.id));
+    setCorrigidos((atual) => atual.filter((id) => !ids.has(id)));
   }
 
   const respondidos = itens.filter((item) => respostas[item.id]).length;
@@ -324,6 +347,18 @@ export function ExecucaoInspecao({
   function gravar(itemId: string, resposta: Resposta) {
     salvarResposta(inspecao.id, itemId, resposta);
     setRespostas((atual) => ({ ...atual, [itemId]: resposta }));
+    // Mesma regra do banco: "corrigido na hora" só existe em inadequado.
+    if (resposta !== 'inadequado') {
+      setCorrigidos((atual) => atual.filter((id) => id !== itemId));
+    }
+  }
+
+  function alternarCorrigido(itemId: string) {
+    const corrigir = !corrigidos.includes(itemId);
+    marcarCorrigidoNaHora(inspecao.id, itemId, corrigir);
+    setCorrigidos((atual) =>
+      corrigir ? [...atual, itemId] : atual.filter((id) => id !== itemId),
+    );
   }
 
   function responder(item: ItemChecklist, resposta: Resposta) {
@@ -402,7 +437,7 @@ export function ExecucaoInspecao({
         scrollEventThrottle={32}
         // `extraData` avisa a lista de que algo de fora dos itens mudou.
         // Sem isso, o SectionList não redesenharia as linhas ao responder.
-        extraData={respostas}
+        extraData={estadoDaLista}
         ListHeaderComponent={
           <>
             {prelude}
@@ -453,6 +488,9 @@ export function ExecucaoInspecao({
               recuado={linha.recuado}
               resposta={respostas[linha.item.id]}
               aoResponder={(escolha) => responder(linha.item, escolha)}
+              corrigivel={podeCorrigirNaHora}
+              corrigido={corrigidos.includes(linha.item.id)}
+              aoAlternarCorrigido={() => alternarCorrigido(linha.item.id)}
             />
           );
         }}
@@ -907,12 +945,19 @@ function LinhaItem({
   resposta,
   recuado,
   aoResponder,
+  corrigivel,
+  corrigido,
+  aoAlternarCorrigido,
 }: {
   item: ItemChecklist;
   resposta: Resposta | undefined;
   /** Recuado = está aberto dentro de uma verificação da rotina. */
   recuado?: boolean;
   aoResponder: (resposta: Resposta) => void;
+  /** Esta trilha aceita "corrigi na hora"? (Só a diária.) */
+  corrigivel: boolean;
+  corrigido: boolean;
+  aoAlternarCorrigido: () => void;
 }) {
   // Cada item lembra sozinho se está com a norma aberta. Guardar isso na
   // tela inteira faria a lista redesenhar por causa de um item só.
@@ -1013,6 +1058,35 @@ function LinhaItem({
           );
         })}
       </View>
+
+      {/* CORREÇÃO IMEDIATA: só aparece no inadequado da diária. Marcado,
+          o item não vira ação no plano — mas continua inadequado no score. */}
+      {corrigivel && resposta === 'inadequado' ? (
+        <Pressable
+          onPress={aoAlternarCorrigido}
+          style={({ pressed }) => [
+            estilos.corrigido,
+            corrigido && estilos.corrigidoMarcado,
+            pressed && estilos.pressionado,
+          ]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: corrigido }}
+        >
+          <Ionicons
+            name={corrigido ? 'checkbox' : 'square-outline'}
+            size={20}
+            color={corrigido ? Cores.primaria : Cores.textoSecundario}
+          />
+          <View style={estilos.flex}>
+            <Text style={estilos.corrigidoTitulo}>Corrigi na hora</Text>
+            <Text style={estilos.corrigidoNota}>
+              {corrigido
+                ? 'Não vai para o plano de ação. Continua contando como inadequado no score.'
+                : 'Se ainda precisa de conserto, deixe desmarcado: vira uma ação no plano.'}
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1223,6 +1297,20 @@ const estilos = StyleSheet.create({
     overflow: 'hidden',
   },
   avisoParcial: { fontSize: 12, color: Cores.acentoTexto, marginTop: 10 },
+  corrigido: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Cores.borda,
+  },
+  corrigidoMarcado: { backgroundColor: Cores.primariaClara, borderColor: Cores.primaria },
+  flex: { flex: 1 },
+  corrigidoTitulo: { fontSize: 14, fontWeight: '700', color: Cores.texto },
+  corrigidoNota: { fontSize: 12, lineHeight: 17, color: Cores.textoSecundario, marginTop: 2 },
   itemTopo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   codigoItem: { flex: 1, fontSize: 12, fontWeight: '700', color: Cores.primariaTexto },
   textoItem: { fontSize: 14, lineHeight: 21, color: Cores.textoSecundario },

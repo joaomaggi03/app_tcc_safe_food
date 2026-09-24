@@ -26,9 +26,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   listarInspecoes,
   painelInicio,
+  resumoAcoes,
   TRILHAS,
   type Estabelecimento,
   type PainelInicio,
+  type ResumoAcoes,
   type ResumoInspecao,
   type Trilha,
 } from '../db/consultas';
@@ -86,6 +88,7 @@ export default function TelaConformidade() {
 
 interface Dados {
   painel: PainelInicio;
+  acoes: ResumoAcoes;
   porTrilha: Record<Trilha, ResumoInspecao[]>;
   totais: Record<Trilha, number>;
 }
@@ -104,7 +107,12 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
       porTrilha[trilha] = todas;
     }
 
-    setDados({ painel: painelInicio(estabelecimento.id), porTrilha, totais });
+    setDados({
+      painel: painelInicio(estabelecimento.id),
+      acoes: resumoAcoes(estabelecimento.id),
+      porTrilha,
+      totais,
+    });
   }, [estabelecimento]);
 
   // Relido a cada foco: concluir uma inspeção em outra aba muda tudo aqui.
@@ -123,6 +131,7 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
       <QuatroLeituras painel={dados.painel} router={router} />
+      <CartaoPlano acoes={dados.acoes} aoAbrir={() => router.push('/plano-acao')} />
 
       {vazio ? (
         <Text style={estilos.vazio}>
@@ -401,6 +410,53 @@ function LinhaPendente({
   );
 }
 
+/**
+ * A porta do PLANO DE AÇÃO (RF07).
+ *
+ * Fica logo abaixo das quatro leituras porque é a continuação delas: as
+ * leituras dizem "como estou", o plano diz "o que estou fazendo a
+ * respeito". Aparece mesmo com o plano vazio — é o único caminho até ele
+ * fora do resultado de uma inspeção.
+ */
+function CartaoPlano({ acoes, aoAbrir }: { acoes: ResumoAcoes; aoAbrir: () => void }) {
+  const detalhes: string[] = [];
+  if (acoes.atrasadas > 0) {
+    detalhes.push(`${acoes.atrasadas} ${acoes.atrasadas === 1 ? 'atrasada' : 'atrasadas'}`);
+  }
+  if (acoes.paraConcluir > 0) {
+    detalhes.push(`${acoes.paraConcluir} para concluir`);
+  }
+
+  return (
+    <Pressable
+      onPress={aoAbrir}
+      style={({ pressed }) => [estilos.cartao, pressed && estilos.pressionado]}
+      accessibilityRole="button"
+    >
+      <View style={estilos.cabecalhoSecao}>
+        <Text style={estilos.tituloCartao}>Plano de ação</Text>
+        <Ionicons name="chevron-forward" size={16} color={Cores.textoSuave} />
+      </View>
+      <Text style={estilos.resumoPlano}>
+        {acoes.abertas === 0
+          ? 'Nenhuma ação aberta'
+          : `${acoes.abertas} ${acoes.abertas === 1 ? 'ação aberta' : 'ações abertas'}`}
+      </Text>
+      {detalhes.length > 0 ? (
+        <Text style={[estilos.subtexto, acoes.atrasadas > 0 && estilos.subtextoAlerta]}>
+          {detalhes.join(' · ')}
+        </Text>
+      ) : (
+        <Text style={estilos.subtexto}>
+          {acoes.abertas === 0
+            ? 'O app cria as ações ao concluir uma inspeção com itens inadequados.'
+            : 'Tudo dentro do prazo.'}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
 const estilos = StyleSheet.create({
   tela: { flex: 1, backgroundColor: Cores.fundo },
   conteudo: { padding: 20, paddingBottom: 40 },
@@ -433,6 +489,7 @@ const estilos = StyleSheet.create({
     paddingVertical: 5,
   },
   rotulo: { fontSize: 14, color: Cores.textoSecundario, flex: 1, paddingRight: 12 },
+  resumoPlano: { fontSize: 14, color: Cores.textoSecundario, marginTop: 6 },
   subtexto: { fontSize: 12, color: Cores.textoSuave, marginTop: 2 },
   subtextoAlerta: { color: Cores.acentoTexto },
   scoreValor: { fontSize: 22, fontWeight: '700' },

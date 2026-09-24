@@ -9,6 +9,7 @@
  *
  *   data/rdc216.ts         a norma estruturada
  *   data/rotina-diaria.ts  a rotina guiada
+ *   db/acao.ts             a regra do plano de ação (RF07)
  *   db/datas.ts            contas de data
  *   db/faixa.ts            atendimento dos itens e faixa da RDC 275
  *   db/funcionamento.ts    os dias em que o estabelecimento abre
@@ -74,6 +75,7 @@ module.exports = {
   arquivosDoApp,
   rdc216: () => exigir('data/rdc216.js'),
   rotinaDiaria: () => exigir('data/rotina-diaria.js'),
+  acao: () => exigir('db/acao.js'),
   datas: () => exigir('db/datas.js'),
   faixa: () => exigir('db/faixa.js'),
   funcionamento: () => exigir('db/funcionamento.js'),
