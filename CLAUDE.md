@@ -171,6 +171,27 @@ exportação em PDF (RF08).
   `try`; onde não existe, os alertas ficam desligados e o app roda inteiro.
   Não use `executionEnvironment` para detectar: ele devolve `storeClient`
   tanto no Expo Go quanto num development build.
+- **Notificação de inspeção em andamento (feito, testado no aparelho).**
+  Fora dos RFs da proposta (ampliação de escopo pequena, pedida pelo autor).
+  Enquanto uma inspeção está aberta, uma notificação FIXA na barra mostra
+  "12 de 32 respondidos" e o toque leva de volta a ela (diária → aba Hoje;
+  as outras → `/inspecao?trilha=`). Pedido do autor, para quem sai do app
+  no meio. Tudo em `db/notificacoes.ts`:
+  - Canal próprio `andamento`, importância BAIXA: não toca nem pula na
+    tela; o handler também esconde o banner dela com o app aberto.
+  - Identificador fixo por trilha: mostrar de novo SUBSTITUI, não empilha.
+  - Progresso como barra de TEXTO (`▰▱`) — o `expo-notifications` não
+    expõe a barra nativa do Android. No Android 14+ o usuário consegue
+    dispensar mesmo a notificação fixa; ela volta na próxima resposta.
+    Não afirmar que ela "não pode ser removida".
+  - Não sai quando a tela desmonta (sair no meio é o caso de uso); sai ao
+    concluir. Ao abrir/voltar ao app, `limparAndamentoOrfao` tira as que
+    perderam o sentido — mesma regra de retomada do `iniciarInspecao`
+    (a diária de outro dia não é retomada).
+  - Todas as chamadas passam por uma FILA: sem ela, o "remover" do
+    concluir podia chegar antes do último "mostrar" e a notificação
+    voltava presa depois da inspeção concluída.
+  - Não pede permissão no meio da inspeção; usa a já pedida na abertura.
 - **Atendimento dos itens e faixa da RDC 275/2002 (feito).** O app passou a
   ter DOIS percentuais sobre a mesma inspeção, e a distinção é deliberada:
   - `score` — **ponderado** (`PESO_CRITICO`). Régua interna, serve para

@@ -32,7 +32,12 @@ import {
   type ItemOculto,
   type ResumoPerfil,
 } from '../db/consultas';
-import { alertasDisponiveis, reagendarAlertas, testarAlerta } from '../db/notificacoes';
+import {
+  alertasDisponiveis,
+  encerrarAndamento,
+  reagendarAlertas,
+  testarAlerta,
+} from '../db/notificacoes';
 import {
   definirIntervaloPeriodico,
   obterEstabelecimentoAtualizado,
@@ -382,6 +387,7 @@ function BotaoRefazerDiaria({ estabelecimento }: { estabelecimento: Estabelecime
                 const apagadas = apagarDiariaDeHoje(estabelecimento.id);
                 // A diária voltou a estar pendente: o alerta de vencimento muda.
                 void reagendarAlertas(estabelecimento);
+                void encerrarAndamento('diario');
                 if (apagadas > 0) {
                   router.replace('/');
                 } else {

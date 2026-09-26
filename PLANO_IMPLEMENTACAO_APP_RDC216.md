@@ -378,6 +378,7 @@ Deixe estes por último. Se implementados, viram diferencial; se não, ficam doc
 | 5 — Periodicidade | RF05 | Set | ✅ concluída |
 | 6 — Auth + Supabase | RF01 | Set/Out | 🟡 código feito (login opcional + backup de mão única + restauração); falta o teste no aparelho |
 | Fora do núcleo | RF07, RF08 | Out (se houver tempo) | RF07 ✅ · RF08 ⏳ não iniciado |
+| Extra (fora dos RFs) | — | — | ✅ notificação fixa de inspeção em andamento, com progresso (pedido do autor; ver CLAUDE.md) |
 
 > Na proposta, o RF01 estava marcado para **julho** — é o único requisito atrasado em relação ao cronograma dela. O RF05 e o RF07 (outubro na proposta) foram entregues antes.
 

@@ -71,7 +71,7 @@ import {
   type Trilha,
   type VerificacaoChecklist,
 } from '../db/consultas';
-import { reagendarAlertas } from '../db/notificacoes';
+import { encerrarAndamento, mostrarAndamento, reagendarAlertas } from '../db/notificacoes';
 import { fazerBackup } from '../db/sincronizacao';
 import Cores from '../theme/cores';
 import {
@@ -345,6 +345,23 @@ export function ExecucaoInspecao({
   const respondidos = itens.filter((item) => respostas[item.id]).length;
   const faltam = itens.length - respondidos;
 
+  /**
+   * A notificação fixa de "inspeção em andamento", atualizada a cada
+   * resposta e ao abrir (ou retomar) a inspeção.
+   *
+   * Ela NÃO sai quando a tela desmonta, de propósito: sair do app no
+   * meio é justamente o caso em que ela serve. Só sai ao concluir.
+   */
+  useEffect(() => {
+    void mostrarAndamento({
+      id: inspecao.id,
+      trilha,
+      modo,
+      respondidos,
+      total: itens.length,
+    });
+  }, [inspecao.id, trilha, modo, respondidos, itens.length]);
+
   function gravar(itemId: string, resposta: Resposta) {
     salvarResposta(inspecao.id, itemId, resposta);
     setRespostas((atual) => ({ ...atual, [itemId]: resposta }));
@@ -388,6 +405,7 @@ export function ExecucaoInspecao({
     // `itens.length` é o tamanho do checklist AGORA; ele é congelado na
     // inspeção para o histórico não mudar quando o checklist mudar.
     concluirInspecao(inspecao.id, itens.length);
+    void encerrarAndamento(trilha);
 
     // Concluir zera o relógio desta trilha, então o alerta de vencimento
     // precisa ser refeito (RF05). Sem `await`: a navegação não espera o

@@ -25,11 +25,11 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
-import { reagendarAlertas } from '../db/notificacoes';
+import { aoTocarAndamento, limparAndamentoOrfao, reagendarAlertas } from '../db/notificacoes';
 import { fazerBackup } from '../db/sincronizacao';
 import { supabase } from '../db/supabase';
 import { useConta } from '../store/conta';
@@ -67,6 +67,38 @@ export default function LayoutRaiz() {
     if (!estabelecimento) return;
     void reagendarAlertas(estabelecimento);
   }, [estabelecimento]);
+
+  /**
+   * A NOTIFICAÇÃO DE INSPEÇÃO EM ANDAMENTO (`db/notificacoes.ts`).
+   *
+   * Tocar nela leva de volta à inspeção. E, como ela é fixa na barra,
+   * a cada abertura (e volta) ao app tiramos as que perderam o sentido —
+   * a diária de ontem que ficou aberta, ou uma que o app fechado à
+   * força não conseguiu tirar.
+   *
+   * Espera o estabelecimento carregar: antes disso a aba Hoje e a rota
+   * `/inspecao` ainda não sabem o que mostrar.
+   */
+  useEffect(() => {
+    if (!estabelecimento) return;
+
+    void limparAndamentoOrfao();
+    const assinaturaApp = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') void limparAndamentoOrfao();
+    });
+
+    // `navigate`, e não `push`: se a tela já está aberta, fica nela em
+    // vez de empilhar uma cópia.
+    const desligarToque = aoTocarAndamento((rota) => router.navigate(rota as never));
+
+    return () => {
+      assinaturaApp.remove();
+      desligarToque();
+    };
+    // Só a EXISTÊNCIA do estabelecimento importa aqui; religar os
+    // ouvintes a cada edição do cadastro seria à toa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!estabelecimento]);
 
   /**
    * A CONTA (RF01) — opcional. Começa a acompanhar a sessão salva.

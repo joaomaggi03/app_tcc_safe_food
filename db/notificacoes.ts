@@ -37,7 +37,12 @@
 
 import type * as TipoNotificacoes from 'expo-notifications';
 import { Platform } from 'react-native';
-import type { Estabelecimento, Trilha } from './consultas';
+import {
+  obterResumoInspecao,
+  type Estabelecimento,
+  type ModoInspecao,
+  type Trilha,
+} from './consultas';
 import { diaLocalISO, diferencaEmDias } from './datas';
 import { proximoDiaAberto } from './funcionamento';
 import {
@@ -71,9 +76,13 @@ function carregar(): typeof TipoNotificacoes | null {
     // O que fazer quando o alerta chega com o app aberto. Por padrão o
     // expo-notifications não mostra nada nesse caso; como o alerta é
     // sobre uma tarefa a fazer, ele deve aparecer de qualquer jeito.
+    //
+    // A EXCEÇÃO é a notificação de andamento: ela se atualiza a cada
+    // resposta, e com o app aberto um banner a cada toque seria ruído.
+    // Ela vai só para a barra, sem pular na tela.
     carregado.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
+      handleNotification: async (notificacao) => ({
+        shouldShowBanner: !ehAndamento(notificacao.request.identifier),
         shouldShowList: true,
         shouldPlaySound: false,
         shouldSetBadge: false,
@@ -306,4 +315,221 @@ export async function testarAlerta(
   });
 
   return true;
+}
+
+// ---------------------------------------------------------------
+// INSPEÇÃO EM ANDAMENTO — a notificação fixa na barra
+// ---------------------------------------------------------------
+//
+// Enquanto uma inspeção está aberta, uma notificação que não se arrasta
+// para fora mostra o progresso ("12 de 32 respondidos") e leva de volta
+// a ela. É para quem sai do app no meio — atender um cliente, receber
+// uma entrega — e esqueceria de voltar.
+//
+// Não é alerta de vencimento: não toca, não vibra, não pula na tela. Por
+// isso tem canal próprio, de importância BAIXA (o Android não deixa um
+// app mudar a importância de um canal depois de criado, então misturar
+// os dois no canal "vencimentos" não seria possível).
+//
+// UMA NOTIFICAÇÃO POR TRILHA, com identificador fixo: mostrar de novo com
+// o mesmo identificador SUBSTITUI a anterior em vez de empilhar uma nova.
+// A diária e uma auditoria abertas ao mesmo tempo aparecem como duas.
+
+const CANAL_ANDAMENTO = 'andamento';
+const PREFIXO_ANDAMENTO = 'andamento-';
+
+function ehAndamento(identificador: string): boolean {
+  return identificador.startsWith(PREFIXO_ANDAMENTO);
+}
+
+const NOME_TRILHA: Record<Trilha, string> = {
+  diario: 'diária',
+  periodico: 'periódica',
+  semestral: 'semestral',
+};
+
+/**
+ * Para onde o toque leva.
+ *
+ * A diária, em qualquer modo, mora na aba Hoje — que retoma a de hoje
+ * sozinha. As outras trilhas moram na rota `/inspecao`, que retoma a
+ * que está em andamento pelo mesmo `iniciarInspecao`.
+ */
+function rotaDaTrilha(trilha: Trilha): string {
+  return trilha === 'diario' ? '/' : `/inspecao?trilha=${trilha}`;
+}
+
+/**
+ * "▰▰▰▰▱▱▱▱▱▱" — o progresso desenhado com caracteres.
+ *
+ * O `expo-notifications` não tem barra de progresso nativa (o
+ * `setProgress` do Android não é exposto). Desenhar no texto funciona em
+ * qualquer aparelho, sem código nativo e sem build novo.
+ *
+ * Arredonda para BAIXO: a barra só fica cheia quando está tudo
+ * respondido — 31 de 32 não pode parecer completo.
+ */
+function barraDeTexto(respondidos: number, total: number, tamanho = 10): string {
+  const cheios = total === 0 ? 0 : Math.floor((respondidos / total) * tamanho);
+  return '▰'.repeat(cheios) + '▱'.repeat(tamanho - cheios);
+}
+
+/**
+ * FILA: as chamadas ao sistema rodam uma de cada vez, na ordem pedida.
+ *
+ * Sem ela, dá para perder a corrida: a última resposta pede "mostrar
+ * 32 de 32", o usuário conclui logo em seguida e o "remover" chega ao
+ * sistema ANTES do "mostrar" — e a notificação reaparece depois da
+ * inspeção concluída, presa na barra.
+ */
+let fila: Promise<unknown> = Promise.resolve();
+
+function enfileirar(tarefa: () => Promise<void>): Promise<void> {
+  const proxima = fila.then(tarefa).catch(() => {
+    // Silencioso como o resto do módulo: notificação é conveniência, e
+    // uma falha aqui não pode atrapalhar quem está inspecionando.
+  });
+  fila = proxima;
+  return proxima;
+}
+
+/**
+ * Mostra (ou atualiza) a notificação de andamento de uma inspeção.
+ *
+ * NÃO pede permissão: pedir no meio de uma inspeção interromperia o
+ * trabalho. O pedido já acontece ao abrir o app (`reagendarAlertas`);
+ * quem recusou lá fica sem esta também.
+ */
+export function mostrarAndamento(inspecao: {
+  id: number;
+  trilha: Trilha;
+  modo: ModoInspecao;
+  respondidos: number;
+  total: number;
+}): Promise<void> {
+  return enfileirar(async () => {
+    const Notifications = carregar();
+    if (!Notifications) return;
+
+    const permissao = await Notifications.getPermissionsAsync();
+    if (!permissao.granted) return;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(CANAL_ANDAMENTO, {
+        name: 'Inspeção em andamento',
+        importance: Notifications.AndroidImportance.LOW,
+        sound: null,
+        vibrationPattern: null,
+        enableVibrate: false,
+      });
+    }
+
+    const { respondidos, total } = inspecao;
+    const faltam = total - respondidos;
+    const porcentagem = total === 0 ? 0 : Math.round((respondidos / total) * 100);
+    const titulo =
+      inspecao.trilha === 'diario' && inspecao.modo === 'rotina'
+        ? `Rotina diária · ${porcentagem}%`
+        : `Inspeção ${NOME_TRILHA[inspecao.trilha]} · ${porcentagem}%`;
+    // A barra vem PRIMEIRO no corpo: a notificação recolhida mostra só uma
+    // linha, e é a barra que se quer ver de relance.
+    const corpo =
+      faltam > 0
+        ? `${barraDeTexto(respondidos, total)}  ${respondidos} de ${total} · toque para continuar`
+        : `${barraDeTexto(respondidos, total)}  Tudo respondido · toque para concluir`;
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: PREFIXO_ANDAMENTO + inspecao.trilha,
+      content: {
+        title: titulo,
+        body: corpo,
+        data: { inspecaoId: inspecao.id, rota: rotaDaTrilha(inspecao.trilha) },
+        // `sticky`: não sai com o arrastar (o `setOngoing` do Android) —
+        // até o Android 13; do 14 em diante o sistema deixa dispensar, e
+        // ela volta na próxima resposta.
+        // `autoDismiss: false`: não some ao ser tocada — tocar RETOMA a
+        // inspeção, não a conclui, então ela ainda está em andamento.
+        sticky: true,
+        autoDismiss: false,
+      },
+      // Sem data: aparece já. O `channelId` põe no canal silencioso.
+      trigger: Platform.OS === 'android' ? { channelId: CANAL_ANDAMENTO } : null,
+    });
+  });
+}
+
+/** Tira a notificação de andamento da trilha — ao concluir a inspeção. */
+export function encerrarAndamento(trilha: Trilha): Promise<void> {
+  return enfileirar(async () => {
+    const Notifications = carregar();
+    if (!Notifications) return;
+    await Notifications.dismissNotificationAsync(PREFIXO_ANDAMENTO + trilha);
+  });
+}
+
+/**
+ * Remove as notificações de andamento que perderam o sentido.
+ *
+ * Ela é fixa, então não pode ficar para trás. Três casos:
+ *  - a inspeção foi concluída (ou apagada) por outro caminho;
+ *  - é uma DIÁRIA de outro dia: o `iniciarInspecao` não a retoma mais,
+ *    e o toque abriria a de hoje, não aquela;
+ *  - o app foi fechado à força e não chegou a chamar o `encerrar`.
+ *
+ * Roda ao abrir o app e ao voltar a ele. Mesma regra do `iniciarInspecao`
+ * para o que ainda pode ser retomado.
+ */
+export function limparAndamentoOrfao(): Promise<void> {
+  return enfileirar(async () => {
+    const Notifications = carregar();
+    if (!Notifications) return;
+
+    const hoje = diaLocalISO();
+    const presentes = await Notifications.getPresentedNotificationsAsync();
+
+    for (const notificacao of presentes) {
+      const identificador = notificacao.request.identifier;
+      if (!ehAndamento(identificador)) continue;
+
+      const id = Number(notificacao.request.content.data?.inspecaoId);
+      const inspecao = Number.isFinite(id) ? obterResumoInspecao(id) : null;
+      const retomavel =
+        inspecao !== null &&
+        inspecao.status === 'em_andamento' &&
+        (inspecao.trilha !== 'diario' || inspecao.dia_local === hoje);
+
+      if (!retomavel) await Notifications.dismissNotificationAsync(identificador);
+    }
+  });
+}
+
+/**
+ * Chama `abrir(rota)` quando o usuário toca numa notificação de
+ * andamento — com o app aberto, em segundo plano ou fechado.
+ *
+ * Com o app FECHADO, o toque acontece antes de este código existir; o
+ * sistema guarda a resposta e ela é lida aqui, uma vez, e apagada — sem
+ * apagar, cada reload do Metro levaria de novo à mesma tela.
+ *
+ * Devolve a função que desliga o ouvinte (para o `useEffect` limpar).
+ */
+export function aoTocarAndamento(abrir: (rota: string) => void): () => void {
+  const Notifications = carregar();
+  if (!Notifications) return () => {};
+
+  function tratar(resposta: TipoNotificacoes.NotificationResponse | null) {
+    if (!resposta) return;
+    if (!ehAndamento(resposta.notification.request.identifier)) return;
+    const rota = resposta.notification.request.content.data?.rota;
+    if (typeof rota === 'string') abrir(rota);
+  }
+
+  const inicial = Notifications.getLastNotificationResponse();
+  if (inicial) {
+    Notifications.clearLastNotificationResponse();
+    tratar(inicial);
+  }
+
+  const assinatura = Notifications.addNotificationResponseReceivedListener(tratar);
+  return () => assinatura.remove();
 }
