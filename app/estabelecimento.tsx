@@ -40,6 +40,8 @@ import {
   statusDasTrilhas,
 } from '../db/periodicidade';
 import { totalDiasAbertos } from '../db/funcionamento';
+import { nuvemConfigurada } from '../db/supabase';
+import { useConta } from '../store/conta';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import { formatarData, ROTULO_TRILHA, textoDiasAbertos } from '../theme/rotulos';
@@ -166,6 +168,9 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         aoAjustar={ajustarPeriodicidade}
       />
 
+      {/* --- Conta e backup na nuvem (RF01) --- */}
+      <ContaBackup aoAbrir={() => router.push('/conta')} />
+
       {/* --- Itens ocultos (RF09) --- */}
       <ItensOcultos
         ocultos={ocultos}
@@ -191,6 +196,42 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
         Base offline: {catalogo.itens} itens da RDC 216 em {catalogo.categorias} categorias.
       </Text>
     </ScrollView>
+  );
+}
+
+/**
+ * A porta para a conta e o backup (RF01). Um cartão só com o estado —
+ * o formulário mora em /conta, para o cadastro poder abri-lo também.
+ */
+function ContaBackup({ aoAbrir }: { aoAbrir: () => void }) {
+  const email = useConta((estado) => estado.email);
+  const ligada = nuvemConfigurada();
+
+  return (
+    <Pressable
+      onPress={aoAbrir}
+      style={({ pressed }) => [estilos.cartao, pressed && estilos.pressionado]}
+      accessibilityRole="button"
+    >
+      <View style={estilos.linhaConta}>
+        <Ionicons
+          name={email ? 'cloud-done-outline' : 'cloud-offline-outline'}
+          size={22}
+          color={email ? Cores.primaria : Cores.textoSuave}
+        />
+        <View style={estilos.flex}>
+          <Text style={estilos.tituloCartao}>Conta e backup</Text>
+          <Text style={estilos.notaCartao}>
+            {!ligada
+              ? 'Backup desligado neste build.'
+              : email
+                ? `Backup ligado: ${email}`
+                : 'Sem conta. Os dados ficam só neste celular.'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={Cores.textoSuave} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -494,6 +535,7 @@ const estilos = StyleSheet.create({
     marginTop: 16,
   },
   tituloCartao: { fontSize: 16, fontWeight: '700', color: Cores.texto },
+  linhaConta: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   notaCartao: { fontSize: 12, lineHeight: 18, color: Cores.textoSuave, marginTop: 4 },
   divisor: { height: 1, backgroundColor: Cores.divisor, marginVertical: 12 },
   linha: {

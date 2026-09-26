@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 9;
+export const VERSAO_SCHEMA = 10;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -345,6 +345,137 @@ const SCHEMA_V9 = `
       CHECK (corrigido_na_hora IN (0, 1));
 `;
 
+/** Um UUID v4 gerado pelo próprio SQLite, em texto ('8f1c…-4…-a…'). */
+const NOVO_UUID = `(lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' ||
+  substr(lower(hex(randomblob(2))), 2) || '-' ||
+  substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' ||
+  lower(hex(randomblob(6))))`;
+
+/** Agora, em UTC ISO com milissegundos — o mesmo formato do `agoraISO()`. */
+const AGORA = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+
+/**
+ * Colunas e gatilhos de uma tabela com IDENTIDADE GLOBAL (`uuid`).
+ *
+ * O gatilho de INSERT só preenche quando a linha chega sem uuid — é o
+ * caso de todo INSERT do app. A restauração de um backup traz o uuid e o
+ * `atualizado_em` do servidor, e esses são respeitados.
+ */
+function comUuid(tabela: string): string {
+  return `
+  ALTER TABLE ${tabela} ADD COLUMN uuid          TEXT;
+  ALTER TABLE ${tabela} ADD COLUMN atualizado_em TEXT;
+  UPDATE ${tabela} SET uuid = ${NOVO_UUID}, atualizado_em = ${AGORA};
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_${tabela}_uuid ON ${tabela} (uuid);
+
+  CREATE TRIGGER IF NOT EXISTS trg_${tabela}_novo AFTER INSERT ON ${tabela}
+    WHEN NEW.uuid IS NULL
+  BEGIN
+    UPDATE ${tabela} SET uuid = ${NOVO_UUID}, atualizado_em = ${AGORA} WHERE rowid = NEW.rowid;
+  END;
+${gatilhoAlterado(tabela)}`;
+}
+
+/** Colunas e gatilhos de uma tabela de chave NATURAL (sem uuid). */
+function semUuid(tabela: string): string {
+  return `
+  ALTER TABLE ${tabela} ADD COLUMN atualizado_em TEXT;
+  UPDATE ${tabela} SET atualizado_em = ${AGORA};
+
+  CREATE TRIGGER IF NOT EXISTS trg_${tabela}_novo AFTER INSERT ON ${tabela}
+    WHEN NEW.atualizado_em IS NULL
+  BEGIN
+    UPDATE ${tabela} SET atualizado_em = ${AGORA} WHERE rowid = NEW.rowid;
+  END;
+${gatilhoAlterado(tabela)}`;
+}
+
+/**
+ * Toda alteração carimba `atualizado_em` — a não ser que quem escreveu
+ * tenha carimbado por conta própria (a restauração faz isso).
+ */
+function gatilhoAlterado(tabela: string): string {
+  return `
+  CREATE TRIGGER IF NOT EXISTS trg_${tabela}_alterado AFTER UPDATE ON ${tabela}
+    WHEN NEW.atualizado_em IS OLD.atualizado_em
+  BEGIN
+    UPDATE ${tabela} SET atualizado_em = ${AGORA} WHERE rowid = NEW.rowid;
+  END;`;
+}
+
+/**
+ * v10: O QUE O BACKUP NA NUVEM PRECISA SABER (RF01, Fase 6).
+ *
+ * Três obstáculos do schema, descritos no plano (seção 6.2), resolvidos
+ * sem mexer em nenhuma chave primária e sem tocar em nenhum INSERT,
+ * UPDATE ou DELETE do `db/consultas.ts`:
+ *
+ * 1. IDENTIDADE GLOBAL. `estabelecimento`, `inspecao` e `acao` usam
+ *    AUTOINCREMENT: o id 1 deste celular e o id 1 de outro são coisas
+ *    diferentes. Elas ganham um `uuid` AO LADO do id — o app continua
+ *    usando o inteiro por dentro, e o uuid só existe na fronteira com a
+ *    nuvem. `resposta` e `item_oculto` não precisam: a chave delas já é
+ *    natural (inspeção + item, estabelecimento + item).
+ *
+ * 2. O QUE MUDOU. Toda tabela de dado do usuário ganha `atualizado_em`,
+ *    carimbado por GATILHO. Gatilho, e não código: com ele, nenhuma das
+ *    escritas que já existem precisa lembrar de carimbar, e uma escrita
+ *    nova escrita amanhã também não. Esquecer um carimbo seria um dado
+ *    que nunca sobe — o tipo de erro que ninguém percebe até precisar
+ *    do backup.
+ *
+ * 3. O QUE FOI APAGADO. O app apaga de verdade (ação excluída, item
+ *    reexibido). Um DELETE não deixa rastro, e a nuvem nunca saberia.
+ *    Em vez de trocar DELETE por "marcar como apagado" em todo o app
+ *    (a lápide do plano, que mexeria em toda leitura), um gatilho anota
+ *    cada exclusão em `sync_exclusao`, e o backup repassa. A anotação é
+ *    apagada assim que a nuvem confirma.
+ *
+ * As linhas que JÁ EXISTEM recebem uuid e carimbo aqui mesmo: é isso que
+ * faz as inspeções feitas antes do login subirem no primeiro backup.
+ *
+ * É o primeiro bloco MONTADO por funções (os gatilhos se repetem nas
+ * cinco tabelas). Por isso é exportado: o auxiliar `migrarAte` dos testes
+ * lê os blocos antigos como texto, e este só existe pronto depois de
+ * compilado.
+ */
+export const SCHEMA_V10 = `
+${comUuid('estabelecimento')}
+${comUuid('inspecao')}
+${comUuid('acao')}
+${semUuid('resposta')}
+${semUuid('item_oculto')}
+
+  CREATE TABLE IF NOT EXISTS sync_exclusao (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    tabela       TEXT NOT NULL,
+    -- uuid da linha apagada; em item_oculto, o uuid do ESTABELECIMENTO.
+    uuid         TEXT NOT NULL,
+    -- Só em item_oculto, que não tem uuid próprio.
+    item_id      TEXT,
+    excluido_em  TEXT NOT NULL
+  );
+
+  CREATE TRIGGER IF NOT EXISTS trg_inspecao_apagada AFTER DELETE ON inspecao
+  BEGIN
+    INSERT INTO sync_exclusao (tabela, uuid, excluido_em)
+    VALUES ('inspecao', OLD.uuid, ${AGORA});
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS trg_acao_apagada AFTER DELETE ON acao
+  BEGIN
+    INSERT INTO sync_exclusao (tabela, uuid, excluido_em)
+    VALUES ('acao', OLD.uuid, ${AGORA});
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS trg_item_oculto_apagado AFTER DELETE ON item_oculto
+  BEGIN
+    INSERT INTO sync_exclusao (tabela, uuid, item_id, excluido_em)
+    SELECT 'item_oculto', e.uuid, OLD.item_id, ${AGORA}
+      FROM estabelecimento e WHERE e.id = OLD.estabelecimento_id;
+  END;
+`;
+
 /** Essa tabela já tem essa coluna? */
 function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
   return db
@@ -401,6 +532,10 @@ export function migrar(db: SQLiteDatabase): void {
 
   if (versaoAtual < 9) {
     db.execSync(SCHEMA_V9);
+  }
+
+  if (versaoAtual < 10) {
+    db.execSync(SCHEMA_V10);
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

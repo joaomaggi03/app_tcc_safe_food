@@ -162,7 +162,7 @@ test('ocultar um item depois não altera o score já registrado', () => {
   const db = cenario({ c1: 'adequado', n1: 'inadequado' });
   const antes = score(somas(db));
 
-  db.runSync("INSERT INTO item_oculto VALUES (1,'n1','2026-09-08T10:00:00.000Z')");
+  db.runSync("INSERT INTO item_oculto (estabelecimento_id, item_id, ocultado_em) VALUES (1,'n1','2026-09-08T10:00:00.000Z')");
 
   assert.equal(score(somas(db)), antes, 'o score de arquivo é imutável');
 });

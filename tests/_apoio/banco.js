@@ -23,7 +23,14 @@ function adaptar(db) {
   return {
     execSync: (sql) => db.exec(sql),
 
-    runSync: (sql, ...parametros) => db.prepare(sql).run(...parametros),
+    // O expo-sqlite chama o id inserido de `lastInsertRowId` (com I
+    // maiúsculo) e o devolve como número; o node:sqlite, de
+    // `lastInsertRowid`. Os dois nomes ficam: o do app, para o código
+    // real rodar aqui, e o do Node, que os testes antigos já usam.
+    runSync: (sql, ...parametros) => {
+      const resultado = db.prepare(sql).run(...parametros);
+      return { ...resultado, lastInsertRowId: Number(resultado.lastInsertRowid) };
+    },
 
     // O expo-sqlite devolve `null` quando não há linha; o node:sqlite
     // devolve `undefined`. A diferença importa: o código do app testa

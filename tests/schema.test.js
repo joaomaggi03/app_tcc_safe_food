@@ -124,6 +124,11 @@ test('atualizar de qualquer versão anterior preserva os dados do usuário', () 
       'Cantina da Ana',
       `v${de}: o estabelecimento sobreviveu`,
     );
+    // v10: o que já existia ganha identidade global e carimbo — é o que
+    // leva ao primeiro backup o que foi feito antes do login.
+    const e = db.getFirstSync('SELECT uuid, atualizado_em FROM estabelecimento');
+    assert.match(e.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, `v${de}: uuid`);
+    assert.ok(e.atualizado_em, `v${de}: carimbo`);
 
     if (de >= 3) {
       assert.equal(
@@ -141,6 +146,11 @@ test('atualizar de qualquer versão anterior preserva os dados do usuário', () 
         1,
         `v${de}: o item oculto (RF09) sobreviveu`,
       );
+      assert.ok(db.getFirstSync('SELECT uuid FROM inspecao').uuid, `v${de}: uuid da inspeção`);
+      assert.ok(
+        db.getFirstSync('SELECT atualizado_em FROM resposta').atualizado_em,
+        `v${de}: carimbo da resposta`,
+      );
     }
   }
 });
@@ -157,6 +167,16 @@ function migrarAte(db, alvo) {
   );
 
   for (let v = 1; v <= alvo; v++) {
+    // A partir da v10 os blocos são MONTADOS por funções (gatilhos
+    // repetidos em várias tabelas), e o texto do arquivo tem `${...}` no
+    // lugar do SQL. Esses são exportados, e vêm prontos do módulo
+    // compilado.
+    const exportado = schema()[`SCHEMA_V${v}`];
+    if (exportado) {
+      db.execSync(exportado);
+      continue;
+    }
+
     const bloco = new RegExp('const SCHEMA_V' + v + ' = `([\\s\\S]*?)`;').exec(fonte);
     assert.ok(bloco, `bloco SCHEMA_V${v} não encontrado em db/schema.ts`);
 

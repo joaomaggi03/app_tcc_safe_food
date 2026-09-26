@@ -72,6 +72,7 @@ import {
   type VerificacaoChecklist,
 } from '../db/consultas';
 import { reagendarAlertas } from '../db/notificacoes';
+import { fazerBackup } from '../db/sincronizacao';
 import Cores from '../theme/cores';
 import {
   RESPOSTAS,
@@ -393,6 +394,10 @@ export function ExecucaoInspecao({
     // sistema operacional, e um alerta que falhe ao agendar não pode
     // impedir o usuário de ver o resultado.
     void reagendarAlertas(estabelecimento);
+
+    // Uma inspeção concluída é o dado que mais vale guardar. Sem conta ou
+    // sem internet, a chamada volta sem fazer nada (RF01).
+    void fazerBackup();
 
     router.replace(`/resultado?id=${inspecao.id}`);
   }

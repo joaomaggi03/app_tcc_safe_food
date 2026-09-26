@@ -140,14 +140,14 @@ test('"não se aplica" esconde o item, e reexibir o traz de volta', () => {
   const antes = checklist(db, { perfil: 'restaurante', estabelecimento: 1 }).length;
   const alvo = checklist(db, { perfil: 'restaurante', estabelecimento: 1 })[0].id;
 
-  db.runSync('INSERT OR IGNORE INTO item_oculto VALUES (1, ?, ?)', alvo, 'x');
+  db.runSync('INSERT OR IGNORE INTO item_oculto (estabelecimento_id, item_id, ocultado_em) VALUES (1, ?, ?)', alvo, 'x');
   const depois = checklist(db, { perfil: 'restaurante', estabelecimento: 1 });
 
   assert.equal(depois.length, antes - 1);
   assert.ok(!depois.some((l) => l.id === alvo), 'o item ocultado sumiu');
 
   // Marcar de novo não duplica.
-  db.runSync('INSERT OR IGNORE INTO item_oculto VALUES (1, ?, ?)', alvo, 'y');
+  db.runSync('INSERT OR IGNORE INTO item_oculto (estabelecimento_id, item_id, ocultado_em) VALUES (1, ?, ?)', alvo, 'y');
   assert.equal(db.getFirstSync('SELECT COUNT(*) AS n FROM item_oculto').n, 1);
 
   db.runSync('DELETE FROM item_oculto WHERE estabelecimento_id = 1 AND item_id = ?', alvo);
@@ -162,7 +162,7 @@ test('ocultar para um estabelecimento não afeta outro', () => {
   );
 
   const alvo = checklist(db, { perfil: 'restaurante' })[0].id;
-  db.runSync('INSERT INTO item_oculto VALUES (1, ?, ?)', alvo, 'x');
+  db.runSync('INSERT INTO item_oculto (estabelecimento_id, item_id, ocultado_em) VALUES (1, ?, ?)', alvo, 'x');
 
   const doPrimeiro = checklist(db, { perfil: 'restaurante', estabelecimento: 1 }).length;
   const doSegundo = checklist(db, { perfil: 'restaurante', estabelecimento: 2 }).length;

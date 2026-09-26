@@ -20,6 +20,9 @@ O diferencial do app é um **checklist dinâmico** que:
 
 - **`PLANO_IMPLEMENTACAO_APP_RDC216.md`** — o plano completo, dividido em fases.
   É o mapa do projeto. Cada fase tem objetivo, critério de "pronto" e um prompt.
+- **`docs/proposta/COMPROMISSOS_PROPOSTA.md`** — o que a proposta do TCC
+  prometeu à banca (requisitos, objetivos, escopo, cronograma), extraído do
+  PDF da proposta que está na mesma pasta. É a régua do agente `fiscal`.
 - **`data/rdc216.ts`** — a RDC 216 inteira estruturada em `PERFIS`, `CATEGORIAS`
   e `ITENS`, com tipos e funções auxiliares. É a fonte de dados do checklist.
 
@@ -54,7 +57,14 @@ consulte esses dois arquivos em vez de inventar estrutura nova.
    emulador/celular e sugira um commit antes da próxima fase.
 7. **Ordem ao criar arquivos:** todo trabalho novo em `/home` do projeto; siga a
    estrutura de pastas que o plano sugere (`app/`, `db/`, `data/`, `store/`, `components/`).
-8. **Commits sem coautoria.** Não acrescente `Co-Authored-By` (nem outra linha
+8. **Fiscalize antes de fechar uma entrega.** Ao terminar uma fase ou
+   entrega, e antes de sugerir o commit, rode o agente **`fiscal`**
+   (`.claude/agents/fiscal.md`). Ele compara o código com a proposta do
+   TCC (`docs/proposta/COMPROMISSOS_PROPOSTA.md`) e com este plano, e é
+   somente leitura. Divergência que ele marcar como "não documentada" é
+   resolvida antes do commit: ou se corrige o código, ou se registra a
+   decisão aqui.
+9. **Commits sem coautoria.** Não acrescente `Co-Authored-By` (nem outra linha
    de atribuição ao Claude) nas mensagens de commit ou de PR. O autor é o
    João Lucas. Os commits antigos que já têm a linha ficam como estão.
 
@@ -307,8 +317,77 @@ exportação em PDF (RF08).
     novo a cada visita, senão traria o texto digitado no item anterior.
   - Fora desta entrega: alerta de prazo de ação (`expo-notifications`) e
     ação atrasada no prelúdio da aba Hoje.
-- **Próxima: Fase 6 (opcional)** — auth + sincronização Supabase (RF01).
-  Fora do núcleo: exportação em PDF (RF08).
+- **Fase 6 mínima — RF01 (schema v10, feito no código; FALTA testar no
+  aparelho contra um Supabase real** — só então a Fase 6 está pronta).
+  Login **opcional** +
+  backup de **mão única** no Supabase. A mão única é a recomendação do
+  plano (6.7); o login OPCIONAL é decisão nossa e **diverge do texto do
+  P-RF01**, que fala em login "para que ele possa acessar o aplicativo".
+  Motivo: offline-first (regra 1) — um app que exige login trava o
+  feirante sem sinal na primeira abertura, e os dados pertencem ao
+  estabelecimento, não a uma conta. O texto do TCC precisa ser ajustado
+  (plano, seção 7). O app abre e funciona inteiro sem conta; a conta só
+  liga o backup.
+  - **Supabase Storage não é usado.** A proposta (P-TEC-2) cita
+    "armazenamento de arquivos"; o app só usa Auth e Postgres. Candidato
+    natural a usá-lo é o PDF do RF08 — decidir ao implementá-lo; senão,
+    vira trabalho futuro no texto.
+  - Projeto Supabase criado e `supabase/schema.sql` aplicado (as 5
+    tabelas conferidas por HTTP em 26/09/2026). Falta o roteiro no
+    aparelho: login, backup, modo avião, restauração e outra conta.
+  - **Sem as chaves, `supabase` é null** (`db/supabase.ts`) e o app roda
+    igual. As chaves ficam em `.env.local` (fora do git; modelo em
+    `.env.example`). O SQL da nuvem, com RLS, está em
+    `supabase/schema.sql` — colar no SQL Editor do Supabase.
+  - **Schema v10 por GATILHOS, sem mexer em nenhuma escrita do
+    `db/consultas.ts`:** `uuid` ao lado do id em `estabelecimento`,
+    `inspecao` e `acao` (resposta e item_oculto têm chave natural);
+    `atualizado_em` em todas as cinco, carimbado por gatilho em todo
+    INSERT/UPDATE; e cada DELETE anotado em `sync_exclusao`, em vez da
+    lápide do plano (que mexeria em toda leitura). O gatilho respeita
+    uuid/carimbo que já vêm preenchidos — é o que a restauração usa.
+  - **É o primeiro bloco de migração MONTADO por funções**, por isso o
+    `SCHEMA_V10` é exportado: o `migrarAte` dos testes lê os blocos
+    antigos como texto e este só existe compilado.
+  - `db/backup.ts` — a parte **testável** (recebe o banco): monta o
+    pacote do que mudou já com os uuids no lugar dos ids, confirma o envio
+    e restaura. `db/sincronizacao.ts` — só transporta; **nenhuma função
+    lança erro**, e ninguém do núcleo importa. Testado em
+    `tests/backup.test.js`, inclusive a ida e volta completa.
+  - **Um aparelho, uma conta.** Depois do primeiro backup, os uuids do
+    aparelho pertencem na nuvem àquela conta, e a RLS recusaria o upsert
+    de outra — para sempre. Por isso o dono fica gravado na `meta`
+    (`dono_backup`, gravado ANTES do primeiro envio e na restauração), e
+    o backup de outra conta volta como `outra_conta`, com aviso na tela,
+    em vez de falhar calado. Achado do `fiscal`: a primeira versão dizia
+    que "outra conta recebe tudo", e um teste que só olhava o pacote
+    confirmava a mentira.
+  - **Exclusões sobem ANTES das linhas**: item ocultado, reexibido e
+    ocultado de novo tem exclusão anotada e linha viva ao mesmo tempo.
+  - **Restauração só em aparelho vazio** (celular novo). Juntar dados dos
+    dois lados é sincronização de duas mãos — trabalho futuro. Com mais
+    de um estabelecimento na conta, vem o alterado por último. Ela roda
+    na tela de quem JÁ está logado (`Restaurar`, em `app/conta.tsx`), com
+    "Tentar de novo"; o cadastro do zero só é oferecido quando a nuvem
+    responde que a conta está vazia — depois de uma falha, criaria um
+    segundo estabelecimento na conta.
+  - **A paginação da restauração ordena pela chave como desempate.** A
+    v10 carimbou todas as linhas antigas com o MESMO instante; ordenar só
+    por `atualizado_em` repetiria ou pularia linhas entre as páginas.
+  - Dispara ao abrir o app, ao VOLTAR ao app (`AppState` — é o "ao
+    reconectar" do plano, sem `expo-network`), ao mudar o cadastro e ao
+    concluir uma inspeção (`fazerBackup()`, sem `await`), e no botão da tela
+    `app/conta.tsx`. Portas: cartão "Conta e backup" na aba
+    Estabelecimento e link no cadastro do primeiro acesso.
+  - Dependências novas são JS puro (`@supabase/supabase-js`,
+    `react-native-url-polyfill`); a sessão fica no `localStorage` do
+    próprio expo-sqlite. **Não deve exigir build nativo novo** (a
+    confirmar no aparelho).
+  - **APK do EAS sai com o backup DESLIGADO** se as variáveis
+    `EXPO_PUBLIC_SUPABASE_*` não forem configuradas no EAS: o `.env.local`
+    fica fora do git e não vai para o servidor de build.
+- **Próxima: RF08** — exportação em PDF. Depois, revisar o texto do TCC
+  contra o que foi construído (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
   Histórico. Dois defeitos: o cartão de prazos do Início listava as três
   trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de

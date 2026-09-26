@@ -42,6 +42,7 @@ import {
   obterEstabelecimentoAtualizado,
 } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
+import { nuvemConfigurada } from '../db/supabase';
 import Cores from '../theme/cores';
 import { DIAS_SEMANA, textoDiasAbertos } from '../theme/rotulos';
 
@@ -138,6 +139,19 @@ export default function TelaCadastro() {
           O tipo define quais exigências da RDC 216 vão aparecer no seu checklist. Itens que não
           se aplicam ao seu caso ficam de fora desde o começo.
         </Text>
+
+        {/* Celular novo de quem já usava o app: em vez de cadastrar de
+            novo, entra na conta e o histórico volta da nuvem (RF01). */}
+        {!editando && nuvemConfigurada() ? (
+          <Pressable
+            onPress={() => router.push('/conta')}
+            style={({ pressed }) => [estilos.restaurar, pressed && estilos.botaoPressionado]}
+          >
+            <Text style={estilos.restaurarTexto}>
+              Já usa o app em outro celular? Entrar e restaurar
+            </Text>
+          </Pressable>
+        ) : null}
 
         {/* --- Nome (obrigatório) --- */}
         <Text style={estilos.rotuloCampo}>Nome do estabelecimento</Text>
@@ -381,4 +395,6 @@ const estilos = StyleSheet.create({
   botaoTextoDesativado: { color: Cores.textoSuave },
 
   erro: { fontSize: 13, color: Cores.acentoTexto, marginTop: 16 },
+  restaurar: { paddingVertical: 10, marginTop: 6 },
+  restaurarTexto: { fontSize: 14, fontWeight: '700', color: Cores.primariaTexto },
 });

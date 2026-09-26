@@ -28,7 +28,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { reagendarAlertas } from '../db/notificacoes';
+import { fazerBackup } from '../db/sincronizacao';
+import { supabase } from '../db/supabase';
+import { useConta } from '../store/conta';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 
@@ -63,6 +67,52 @@ export default function LayoutRaiz() {
     if (!estabelecimento) return;
     void reagendarAlertas(estabelecimento);
   }, [estabelecimento]);
+
+  /**
+   * A CONTA (RF01) — opcional. Começa a acompanhar a sessão salva.
+   */
+  const acompanharConta = useConta((estado) => estado.acompanhar);
+  const email = useConta((estado) => estado.email);
+
+  useEffect(() => acompanharConta(), [acompanharConta]);
+
+  /**
+   * O Supabase renova o login sozinho, mas só deve tentar com o app em
+   * primeiro plano: em segundo plano o sistema pode congelar o app no
+   * meio da renovação. É a recomendação da documentação do Supabase
+   * para React Native.
+   */
+  useEffect(() => {
+    if (!supabase) return;
+    const auth = supabase.auth;
+    if (AppState.currentState === 'active') void auth.startAutoRefresh();
+    const assinatura = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') void auth.startAutoRefresh();
+      else void auth.stopAutoRefresh();
+    });
+    return () => assinatura.remove();
+  }, []);
+
+  /**
+   * BACKUP ao abrir o app e a cada mudança no cadastro — só com conta.
+   *
+   * Sem `await` e sem tratar o resultado, pelo mesmo motivo dos alertas:
+   * sem internet, ele volta como falha e tenta de novo na próxima vez.
+   * Nada aqui pode travar a abertura.
+   */
+  useEffect(() => {
+    if (!email || !estabelecimento) return;
+    void fazerBackup();
+
+    // E ao VOLTAR ao app. É o "ao reconectar" do plano, sem biblioteca de
+    // rede: quem ficou sem sinal na feira e desbloqueia o celular em casa
+    // passa por aqui. Se ainda não houver internet, falha calado e espera
+    // a próxima vez — o `fazerBackup` já junta pedidos repetidos num só.
+    const assinatura = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') void fazerBackup();
+    });
+    return () => assinatura.remove();
+  }, [email, estabelecimento]);
 
   return (
     <>
@@ -155,6 +205,12 @@ export default function LayoutRaiz() {
         <Tabs.Screen
           name="plano-acao"
           options={{ href: null, title: 'Plano de ação' }}
+        />
+
+        {/* Conta e backup na nuvem (RF01): entrar, criar conta, restaurar. */}
+        <Tabs.Screen
+          name="conta"
+          options={{ href: null, title: 'Conta e backup' }}
         />
 
         {/* Criar ou editar UMA ação — `?item=` e, se veio de uma inspeção, `&inspecao=`. */}

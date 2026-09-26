@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
+    "@supabase/supabase-js": "^2.117.2",
     "expo": "~57.0.24",
     "expo-constants": "~57.0.17",
     "expo-dev-client": "~57.0.19",
@@ -20,6 +21,7 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-worklets": "0.10.1",
     "zustand": "^5.0.15"
   },
@@ -33,7 +35,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "icones": "node assets/fonte/gerar-icones.mjs",
-    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
+    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/backup.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "private": true
