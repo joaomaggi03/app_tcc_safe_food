@@ -717,8 +717,9 @@ export interface Inspecao {
  * cozimento", impossíveis de verificar antes de a cozinha funcionar.
  *
  * Se o usuário retoma escolhendo outro modo, o modo é atualizado e as
- * respostas continuam valendo: o essencial é um subconjunto do completo,
- * então trocar de um para o outro só muda quantos itens aparecem.
+ * respostas continuam valendo: Rotina e Completa gravam os MESMOS itens
+ * (a rotina só os agrupa em verificações), então trocar de um para o
+ * outro muda a apresentação, não o que foi respondido.
  */
 export function iniciarInspecao(
   estabelecimentoId: number,

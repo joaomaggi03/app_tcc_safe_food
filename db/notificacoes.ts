@@ -38,7 +38,7 @@
 import type * as TipoNotificacoes from 'expo-notifications';
 import { Platform } from 'react-native';
 import type { Estabelecimento, Trilha } from './consultas';
-import { diaLocalISO } from './datas';
+import { diaLocalISO, diferencaEmDias } from './datas';
 import { proximoDiaAberto } from './funcionamento';
 import {
   ANTECEDENCIA_DIAS,
@@ -133,9 +133,31 @@ async function garantirCanal(Notifications: typeof TipoNotificacoes): Promise<vo
   });
 }
 
-/** Título e corpo do alerta de cada trilha. */
-function textoDoAlerta(status: StatusTrilha, nome: string): { titulo: string; corpo: string } {
-  const dias = status.diasParaVencer;
+/** "1 dia", "3 dias". */
+function emDias(n: number): string {
+  return n === 1 ? '1 dia' : `${n} dias`;
+}
+
+/** "hoje", "amanhã", "em 7 dias". */
+function prazo(dias: number): string {
+  if (dias === 0) return 'hoje';
+  if (dias === 1) return 'amanhã';
+  return `em ${emDias(dias)}`;
+}
+
+/**
+ * Título e corpo do alerta de cada trilha.
+ *
+ * `quando` é o instante em que o alerta vai APARECER. Os dias do texto
+ * contam a partir dele, e não de hoje: um alerta agendado agora para
+ * daqui a três semanas não pode chegar dizendo "vence em 30 dias".
+ */
+function textoDoAlerta(
+  status: StatusTrilha,
+  nome: string,
+  quando: Date = new Date(),
+): { titulo: string; corpo: string } {
+  const dias = diferencaEmDias(diaLocalISO(quando), status.proximoVencimento);
 
   if (status.trilha === 'diario') {
     return {
@@ -149,8 +171,8 @@ function textoDoAlerta(status: StatusTrilha, nome: string): { titulo: string; co
       titulo: dias < 0 ? 'Laudo da água vencido' : 'Laudo da água vence em breve',
       corpo:
         dias < 0
-          ? `A verificação semestral da água do ${nome} está vencida há ${Math.abs(dias)} dias. É prazo legal da RDC 216.`
-          : `A verificação semestral da água do ${nome} vence em ${dias} dias. Agende o laudo e a limpeza do reservatório.`,
+          ? `A verificação semestral da água do ${nome} está vencida há ${emDias(-dias)}. É prazo legal da RDC 216.`
+          : `A verificação semestral da água do ${nome} vence ${prazo(dias)}. Agende o laudo e a limpeza do reservatório.`,
     };
   }
 
@@ -158,8 +180,8 @@ function textoDoAlerta(status: StatusTrilha, nome: string): { titulo: string; co
     titulo: dias < 0 ? 'Auditoria periódica vencida' : 'Auditoria periódica se aproximando',
     corpo:
       dias < 0
-        ? `A auditoria do ${nome} está vencida há ${Math.abs(dias)} dias.`
-        : `A auditoria do ${nome} vence em ${dias} dias. Reserve um tempo para percorrer o checklist completo.`,
+        ? `A auditoria do ${nome} está vencida há ${emDias(-dias)}.`
+        : `A auditoria do ${nome} vence ${prazo(dias)}. Reserve um tempo para percorrer o checklist completo.`,
   };
 }
 
@@ -223,12 +245,13 @@ export async function reagendarAlertas(estabelecimento: Estabelecimento): Promis
   let agendados = 0;
 
   for (const status of statusDasTrilhas(estabelecimento)) {
-    // Trilha em dia e longe do vencimento não precisa de lembrete: ele
-    // será reagendado na próxima abertura do app, quando o prazo tiver
-    // se aproximado de verdade.
-    if (status.situacao === 'em_dia') continue;
-
-    const { titulo, corpo } = textoDoAlerta(status, estabelecimento.nome);
+    // A trilha EM DIA também é agendada, para o futuro. Pular ela era o
+    // defeito: concluída a diária de hoje, a de amanhã fica "em dia", e o
+    // lembrete dela só nasceria se o app fosse aberto amanhã — justamente
+    // quando o lembrete já não é necessário. Alerta local não precisa do
+    // app aberto para disparar; precisa só de ter sido agendado.
+    const quando = quandoAlertar(status, estabelecimento.dias_funcionamento);
+    const { titulo, corpo } = textoDoAlerta(status, estabelecimento.nome, quando);
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -239,7 +262,7 @@ export async function reagendarAlertas(estabelecimento: Estabelecimento): Promis
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: quandoAlertar(status, estabelecimento.dias_funcionamento),
+        date: quando,
         channelId: CANAL_ANDROID,
       },
     });

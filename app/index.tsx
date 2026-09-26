@@ -33,8 +33,8 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ExecucaoInspecao } from '../components/ExecucaoInspecao';
 import MedidorScore from '../components/MedidorScore';
 import {
@@ -93,6 +93,8 @@ export default function TelaHoje() {
 }
 
 interface DadosHoje {
+  /** O dia local a que estes dados se referem. */
+  dia: string;
   /** A diária DE HOJE em andamento, se houver. */
   emAndamento: ResumoInspecao | null;
   /** A diária DE HOJE já concluída, se houver. */
@@ -125,13 +127,26 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
    */
   const [abrirFechado, setAbrirFechado] = useState(false);
 
+  /** O dia da última recarga — para perceber a virada da meia-noite. */
+  const diaCarregado = useRef<string | null>(null);
+
   const recarregar = useCallback(() => {
     const hoje = diaLocalISO();
+
+    // VIROU O DIA com a tela montada. O que foi escolhido ontem não vale
+    // hoje: sem zerar, o modo de ontem abriria sozinho a diária de hoje.
+    if (diaCarregado.current !== null && diaCarregado.current !== hoje) {
+      setModoEscolhido(null);
+      setAbrirFechado(false);
+    }
+    diaCarregado.current = hoje;
+
     const diarias = listarInspecoes(estabelecimento.id, { trilha: 'diario' });
 
     const deHoje = diarias.filter((inspecao) => inspecao.dia_local === hoje);
 
     setDados({
+      dia: hoje,
       emAndamento: deHoje.find((i) => i.status === 'em_andamento') ?? null,
       concluida: deHoje.find((i) => i.status === 'concluida') ?? null,
       prazos: statusDasTrilhas(estabelecimento),
@@ -142,6 +157,21 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   }, [estabelecimento]);
 
   useFocusEffect(recarregar);
+
+  /**
+   * Recarrega também quando o app VOLTA DO SEGUNDO PLANO.
+   *
+   * O foco da aba não muda quando o celular é desbloqueado: quem deixou o
+   * app aberto na aba Hoje ontem à noite e o retoma de manhã não troca de
+   * tela nenhuma. Sem isto, a execução continuaria presa à diária de
+   * ontem, e as respostas de hoje iriam parar nela.
+   */
+  useEffect(() => {
+    const assinatura = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') recarregar();
+    });
+    return () => assinatura.remove();
+  }, [recarregar]);
 
   const abrirFolha = useCallback(() => router.push('/nova-inspecao'), [router]);
 
@@ -182,7 +212,9 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   if (executando && modoEmUso) {
     return (
       <ExecucaoInspecao
-        key={`diario-${modoEmUso}`}
+        // O DIA entra na chave: na virada, a execução nasce de novo e abre
+        // a diária de hoje, em vez de seguir gravando na de ontem.
+        key={`diario-${dados.dia}-${modoEmUso}`}
         estabelecimento={estabelecimento}
         trilha="diario"
         modo={modoEmUso}
