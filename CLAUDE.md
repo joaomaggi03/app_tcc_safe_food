@@ -228,8 +228,11 @@ exportação em PDF (RF08).
     estabelecimento" é o **atendimento da última auditoria periódica**; as
     quatro leituras continuam como estão.
 - **Sequência de dias na aba Hoje (feito).** Cartão no estilo "streak":
-  quantos dias seguidos a diária foi CONCLUÍDA, com recorde e uma tira dos
-  últimos sete dias. Mede **adesão à rotina**, não conformidade — são
+  quantos dias seguidos a diária foi CONCLUÍDA, com recorde e uma tira da
+  **semana atual, de segunda a domingo**, com a inicial do dia embaixo de
+  cada bolinha (era uma janela móvel dos últimos sete dias, e ninguém
+  sabia qual bolinha era qual; os dias depois de hoje aparecem só com o
+  contorno). Mede **adesão à rotina**, não conformidade — são
   perguntas diferentes, e por isso o número não se mistura com o score (dá
   para ter 95% fazendo a diária duas vezes por semana).
   - `db/sequencia.ts` — regra **pura** (padrão do `vencimento.ts`);
@@ -243,6 +246,35 @@ exportação em PDF (RF08).
     TRÊS estados da aba. No corpo da tela, sumiria justamente durante as
     horas em que ela está mais em uso. Ordem: identificação → atrasos →
     sequência; o atraso é chamado para agir e vem antes do estímulo.
+- **Ferramentas de teste (andaime, só `__DEV__`).** Botões na aba
+  Estabelecimento que só aparecem com o app rodando pelo Metro; no app
+  instalado somem. Servem para testar e demonstrar o que não se fabrica
+  pelo uso normal numa noite só. Funções em `db/consultas.ts`:
+  - `apagarDiariaDeHoje` — "Refazer a diária de hoje": apaga a diária de
+    hoje (e as ações que ela gerou) para poder repeti-la no mesmo dia.
+  - `gerarDiariasDeTeste` — "Gerar histórico": diárias concluídas nos 14
+    dias ABERTOS anteriores a hoje que ainda não têm diária.
+  - `completarSemanaDeTeste` — "Completar a semana": diária de segunda
+    até hoje, **inclusive dia fechado** — que pela regra da sequência
+    conta, então a corrida ganha dias que o estabelecimento real não
+    teria. Aceitável num andaime.
+  - `apagarDadosDeTeste` — "Apagar dados de teste": remove todas as
+    fabricadas, e só elas.
+  - **As fabricadas são gravadas com `inspecao.modo = 'teste'`** (rótulo
+    "Teste" no histórico). Sem a marca, eram indistinguíveis das reais e
+    não havia como tirá-las (achado do `fiscal`). A marca mora na
+    inspeção, e não na `meta`, para sobreviver à ida e volta do backup.
+    `modo` é TEXT sem restrição dos dois lados, então não houve migração.
+  - **Enquanto existem, entram em tudo**: histórico, rotina do mês,
+    sequência, recorde e score (em parte dos dias há um inadequado
+    corrigido na hora, que derruba o score de propósito). E sobem no
+    backup se houver conta. O "Apagar dados de teste" passa pelos
+    gatilhos da v10, então a exclusão também chega à nuvem.
+  - Não geram ações (não chamam `gerarAcoesDaInspecao`): o plano de ação
+    não recebe itens inventados.
+  - **Para a banca:** demonstrar com histórico fabricado não é evidência
+    de uso. Se usar, dizer, e de preferência num estabelecimento sem
+    conta de backup.
 - **Dias de funcionamento (schema v6, feito).** O cadastro pergunta em que
   dias da semana o estabelecimento abre, e o app para de cobrar a diária
   nas folgas. Era o defeito que feirante e ambulante (2 dos 6 perfis)
@@ -338,8 +370,8 @@ exportação em PDF (RF08).
     novo a cada visita, senão traria o texto digitado no item anterior.
   - Fora desta entrega: alerta de prazo de ação (`expo-notifications`) e
     ação atrasada no prelúdio da aba Hoje.
-- **Fase 6 mínima — RF01 (schema v10, feito no código; FALTA testar no
-  aparelho contra um Supabase real** — só então a Fase 6 está pronta).
+- **Fase 6 mínima — RF01 (schema v10) — concluída.** Testada no aparelho
+  contra o Supabase real em 27/09/2026.
   Login **opcional** +
   backup de **mão única** no Supabase. A mão única é a recomendação do
   plano (6.7); o login OPCIONAL é decisão nossa e **diverge do texto do
@@ -353,9 +385,11 @@ exportação em PDF (RF08).
     "armazenamento de arquivos"; o app só usa Auth e Postgres. Candidato
     natural a usá-lo é o PDF do RF08 — decidir ao implementá-lo; senão,
     vira trabalho futuro no texto.
-  - Projeto Supabase criado e `supabase/schema.sql` aplicado (as 5
-    tabelas conferidas por HTTP em 26/09/2026). Falta o roteiro no
-    aparelho: login, backup, modo avião, restauração e outra conta.
+  - Projeto Supabase criado e `supabase/schema.sql` aplicado. Roteiro
+    no aparelho aprovado pelo autor em 27/09/2026: uso sem conta, criar
+    conta + backup, backup automático ao concluir, modo avião (app
+    inteiro offline e subida ao voltar), restauração depois de "Limpar
+    dados" e "Backup parado" com outra conta.
   - **Sem as chaves, `supabase` é null** (`db/supabase.ts`) e o app roda
     igual. As chaves ficam em `.env.local` (fora do git; modelo em
     `.env.example`). O SQL da nuvem, com RLS, está em

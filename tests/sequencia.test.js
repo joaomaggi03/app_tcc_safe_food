@@ -134,36 +134,70 @@ test('a sequência atravessa a virada do ano', () => {
 });
 
 // ---------------------------------------------------------------
-// A TIRA DOS SETE DIAS
+// A TIRA DA SEMANA (SEGUNDA A DOMINGO)
 // ---------------------------------------------------------------
 
-test('a tira tem sete dias, do mais antigo para hoje', () => {
+// HOJE (16/09/2026) é uma quarta: a semana vai da segunda 14 ao domingo 20.
+
+test('a tira é a semana atual, de segunda a domingo', () => {
   const s = calcularSequencia(corrida(0, 2), HOJE);
 
-  assert.equal(s.ultimosSete.length, 7);
-  assert.equal(s.ultimosSete[0].dia, haDias(6));
-  assert.equal(s.ultimosSete[6].dia, HOJE);
+  assert.equal(s.semana.length, 7);
+  assert.equal(s.semana[0].dia, '2026-09-14', 'começa na segunda');
+  assert.equal(s.semana[6].dia, '2026-09-20', 'termina no domingo');
 });
 
-test('só o último dia da tira é marcado como hoje', () => {
+test('só hoje é marcado como hoje, e os dias depois dele como futuro', () => {
   const s = calcularSequencia([], HOJE);
-  const marcados = s.ultimosSete.filter((d) => d.hoje);
 
-  assert.equal(marcados.length, 1);
-  assert.equal(marcados[0].dia, HOJE);
+  assert.deepEqual(s.semana.filter((d) => d.hoje).map((d) => d.dia), [HOJE]);
+  assert.deepEqual(
+    s.semana.filter((d) => d.futuro).map((d) => d.dia),
+    ['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20'],
+  );
 });
 
-test('a tira marca certo quais dias tiveram diária', () => {
-  const s = calcularSequencia([haDias(0), haDias(2), haDias(6)], HOJE);
-  const feitos = s.ultimosSete.filter((d) => d.feita).map((d) => d.dia);
+test('na segunda hoje é a primeira bolinha; no domingo, a última', () => {
+  const segunda = calcularSequencia([], '2026-09-14');
+  const domingo = calcularSequencia([], '2026-09-20');
 
-  assert.deepEqual(feitos, [haDias(6), haDias(2), haDias(0)], 'na ordem da tira');
+  assert.equal(segunda.semana[0].hoje, true);
+  assert.equal(segunda.semana.filter((d) => d.futuro).length, 6);
+  assert.equal(domingo.semana[6].hoje, true);
+  assert.equal(domingo.semana.filter((d) => d.futuro).length, 0);
+});
+
+test('um domingo fechado visto na quarta é futuro E fechado', () => {
+  // A tela pinta pelos dois campos; o teste garante que um não apaga o outro.
+  const s = calcularSequencia([], HOJE, '0111111');
+  const domingo = s.semana[6];
+
+  assert.equal(domingo.dia, '2026-09-20');
+  assert.equal(domingo.futuro, true);
+  assert.equal(domingo.fechado, true);
+  assert.equal(s.semana[5].fechado, false, 'o sábado abre');
+});
+
+test('a semana atravessa a virada do mês', () => {
+  // 01/10/2026 é uma quinta: a segunda da semana ainda é de setembro.
+  const s = calcularSequencia([], '2026-10-01');
+
+  assert.equal(s.semana[0].dia, '2026-09-28');
+  assert.equal(s.semana[6].dia, '2026-10-04');
+});
+
+test('a tira marca certo quais dias da semana tiveram diária', () => {
+  // haDias(6) é a quinta da semana passada: fica de fora da tira.
+  const s = calcularSequencia([haDias(0), haDias(2), haDias(6)], HOJE);
+  const feitos = s.semana.filter((d) => d.feita).map((d) => d.dia);
+
+  assert.deepEqual(feitos, ['2026-09-14', HOJE], 'na ordem da tira');
 });
 
 test('uma diária de dez dias atrás não aparece na tira, mas conta no recorde', () => {
   const s = calcularSequencia(corrida(10, 12), HOJE);
 
-  assert.deepEqual(s.ultimosSete.filter((d) => d.feita), []);
+  assert.deepEqual(s.semana.filter((d) => d.feita), []);
   assert.equal(s.recorde, 3);
 });
 
@@ -240,7 +274,7 @@ test('quem só abre no sábado emenda sábados de semanas diferentes', () => {
 
 test('a tira marca os dias fechados', () => {
   const s = calcularSequencia([], SAB, '0111111');
-  const fechados = s.ultimosSete.filter((d) => d.fechado).map((d) => d.dia);
+  const fechados = s.semana.filter((d) => d.fechado).map((d) => d.dia);
 
-  assert.deepEqual(fechados, ['2026-09-13'], 'só o domingo da janela');
+  assert.deepEqual(fechados, ['2026-09-20'], 'só o domingo da semana');
 });

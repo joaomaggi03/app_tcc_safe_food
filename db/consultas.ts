@@ -19,9 +19,9 @@ import {
   type SituacaoAcao,
   type StatusAcao,
 } from './acao';
-import { diaLocalHaDias, diaLocalISO } from './datas';
+import { diaComHora, diaDaSemana, diaLocalHaDias, diaLocalISO, somarDias } from './datas';
 import { atendimentoDosItens } from './faixa';
-import { normalizarFuncionamento } from './funcionamento';
+import { abreNoDia, normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
 import { calcularSequencia, type Sequencia } from './sequencia';
 
@@ -690,8 +690,14 @@ export type Resposta = 'adequado' | 'inadequado' | 'nao_se_aplica' | 'nao_observ
  * itens críticos. Continua no tipo porque inspeções antigas foram
  * gravadas com ele e o histórico precisa saber rotulá-las; nenhuma
  * inspeção nova o usa.
+ *
+ * 'teste' marca as diárias FABRICADAS pelas ferramentas de teste
+ * (`gerarDiariasDeTeste`, `completarSemanaDeTeste`). A marca é o que
+ * permite apagá-las depois (`apagarDadosDeTeste`) e o que as identifica
+ * no histórico. Mora na própria inspeção, e não na `meta`, para
+ * sobreviver à ida e volta do backup.
  */
-export type ModoInspecao = 'rotina' | 'completa' | 'essencial';
+export type ModoInspecao = 'rotina' | 'completa' | 'essencial' | 'teste';
 
 export interface Inspecao {
   id: number;
@@ -1769,4 +1775,198 @@ export function apagarDiariaDeHoje(estabelecimentoId: number): number {
   });
 
   return ids.length;
+}
+
+/**
+ * FERRAMENTA DE TESTE: grava diárias CONCLUÍDAS nos dias abertos
+ * anteriores a hoje, para a sequência de dias e o histórico terem o que
+ * mostrar numa demonstração.
+ *
+ * A sequência mede dias SEGUIDOS, e isso não se fabrica pelo uso normal
+ * numa noite só. Só aparece em modo de desenvolvimento, como o
+ * `apagarDiariaDeHoje`.
+ *
+ *  - Pula dia FECHADO (a máscara de funcionamento) e dia que já tem
+ *    diária, então rodar duas vezes não duplica nada.
+ *  - Não mexe em hoje: a diária de hoje continua sendo feita de verdade.
+ *  - Respostas quase todas "adequado", com um "não observado" e, em
+ *    alguns dias, um inadequado CORRIGIDO NA HORA — que não vira ação,
+ *    para o plano de ação não se encher de itens inventados.
+ *  - Não chama `gerarAcoesDaInspecao`, pelo mesmo motivo.
+ *  - Grava com `modo = 'teste'`: aparece como "Teste" no histórico e sai
+ *    inteira pelo `apagarDadosDeTeste`.
+ *
+ * Devolve quantas diárias foram criadas.
+ */
+export function gerarDiariasDeTeste(estabelecimentoId: number, diasAbertos = 14): number {
+  const db = obterBanco();
+  const base = baseDasDiariasDeTeste(estabelecimentoId);
+  if (!base) return 0;
+
+  let criadas = 0;
+  let recuo = 1;
+
+  db.withTransactionSync(() => {
+    // O limite de 60 dias só protege contra uma máscara estranha.
+    while (criadas < diasAbertos && recuo <= 60) {
+      const dia = somarDias(diaLocalISO(), -recuo);
+      recuo += 1;
+      if (!abreNoDia(base.diasFuncionamento, dia)) continue;
+      if (gravarDiariaDeTeste(estabelecimentoId, base.itens, dia, recuo)) criadas += 1;
+    }
+  });
+
+  return criadas;
+}
+
+/**
+ * FERRAMENTA DE TESTE: grava a diária de TODOS os dias da semana atual,
+ * de segunda até HOJE — inclusive dia fechado e o próprio hoje —, para a
+ * tira da aba Hoje aparecer inteira preenchida numa demonstração.
+ *
+ * Os dias depois de hoje ficam de fora de propósito: seriam inspeções
+ * gravadas no futuro. Dia que já tem diária (em qualquer situação,
+ * inclusive a de hoje em andamento) não é tocado.
+ *
+ * Devolve quantas diárias foram criadas.
+ */
+export function completarSemanaDeTeste(estabelecimentoId: number): number {
+  const db = obterBanco();
+  const base = baseDasDiariasDeTeste(estabelecimentoId);
+  if (!base) return 0;
+
+  const hoje = diaLocalISO();
+  // Mesma conta do `montarSemana` em db/sequencia.ts: dias desde segunda.
+  const desdeSegunda = (diaDaSemana(hoje) + 6) % 7;
+  let criadas = 0;
+
+  db.withTransactionSync(() => {
+    for (let i = desdeSegunda; i >= 0; i--) {
+      const dia = somarDias(hoje, -i);
+      if (gravarDiariaDeTeste(estabelecimentoId, base.itens, dia, i + 1)) criadas += 1;
+    }
+  });
+
+  return criadas;
+}
+
+/**
+ * FERRAMENTA DE TESTE: apaga TODAS as diárias fabricadas pelas
+ * ferramentas de teste — as gravadas com `modo = 'teste'` — e o que
+ * pendurou nelas.
+ *
+ * As respostas vão pelo `ON DELETE CASCADE` do schema v3; as ações, que
+ * as diárias de teste não geram mas o usuário pode ter criado à mão pela
+ * tela de resultado, vão junto, como no `apagarDiariaDeHoje`.
+ *
+ * Cada DELETE é anotado em `sync_exclusao` pelos gatilhos da v10, então
+ * o próximo backup apaga as diárias de teste também na nuvem.
+ *
+ * Devolve quantas diárias foram apagadas.
+ */
+export function apagarDadosDeTeste(estabelecimentoId: number): number {
+  const db = obterBanco();
+  const ids = db
+    .getAllSync<{ id: number }>(
+      `SELECT id FROM inspecao WHERE estabelecimento_id = ? AND modo = 'teste'`,
+      estabelecimentoId,
+    )
+    .map((linha) => linha.id);
+
+  db.withTransactionSync(() => {
+    for (const id of ids) {
+      db.runSync('DELETE FROM acao WHERE inspecao_id = ?', id);
+      db.runSync('DELETE FROM inspecao WHERE id = ?', id);
+    }
+  });
+
+  return ids.length;
+}
+
+/** O que as duas ferramentas de teste precisam: os itens diários e a máscara. */
+function baseDasDiariasDeTeste(
+  estabelecimentoId: number,
+): { itens: string[]; diasFuncionamento: string | null } | null {
+  const db = obterBanco();
+  const est = db.getFirstSync<{ perfil_id: string; dias_funcionamento: string | null }>(
+    'SELECT perfil_id, dias_funcionamento FROM estabelecimento WHERE id = ?',
+    estabelecimentoId,
+  );
+  if (!est) return null;
+
+  // Os itens diários que este estabelecimento enxerga hoje (perfil menos
+  // os ocultos pelo RF09), na ordem do checklist.
+  const itens = db
+    .getAllSync<{ id: string }>(
+      `SELECT i.id FROM item i
+         JOIN item_aplicabilidade a ON a.item_id = i.id AND a.perfil_id = ?
+        WHERE i.frequencia = 'diario'
+          AND i.id NOT IN (SELECT item_id FROM item_oculto WHERE estabelecimento_id = ?)
+        ORDER BY i.ordem`,
+      est.perfil_id,
+      estabelecimentoId,
+    )
+    .map((linha) => linha.id);
+
+  return itens.length > 0 ? { itens, diasFuncionamento: est.dias_funcionamento } : null;
+}
+
+/**
+ * Grava UMA diária concluída de teste no dia pedido, se o dia ainda não
+ * tiver diária. Devolve se gravou.
+ *
+ * Respostas quase todas "adequado", com um "não observado" e, conforme
+ * a `variacao`, um inadequado CORRIGIDO NA HORA — que não vira ação. E
+ * não chama `gerarAcoesDaInspecao`: o plano de ação não recebe itens
+ * inventados.
+ */
+function gravarDiariaDeTeste(
+  estabelecimentoId: number,
+  itens: string[],
+  dia: string,
+  variacao: number,
+): boolean {
+  const db = obterBanco();
+  const jaTem = db.getFirstSync(
+    `SELECT 1 FROM inspecao
+      WHERE estabelecimento_id = ? AND trilha = 'diario' AND dia_local = ?`,
+    estabelecimentoId,
+    dia,
+  );
+  if (jaTem) return false;
+
+  // Hoje, a conclusão é AGORA: 18h de hoje ainda pode estar no futuro.
+  const concluidaEm = dia === diaLocalISO() ? new Date() : diaComHora(dia, 18);
+  // E o início não pode passar da conclusão: rodado antes das 8h, as 8h
+  // de hoje também estão no futuro.
+  const oitoDaManha = diaComHora(dia, 8);
+  const iniciadaEm = oitoDaManha < concluidaEm ? oitoDaManha : concluidaEm;
+
+  // `modo = 'teste'` é a marca que o `apagarDadosDeTeste` procura.
+  const { lastInsertRowId: inspecaoId } = db.runSync(
+    `INSERT INTO inspecao
+       (estabelecimento_id, trilha, modo, data_inicio, data_conclusao, dia_local, status, total_itens)
+     VALUES (?, 'diario', 'teste', ?, ?, ?, 'concluida', ?)`,
+    estabelecimentoId,
+    iniciadaEm.toISOString(),
+    concluidaEm.toISOString(),
+    dia,
+    itens.length,
+  );
+
+  itens.forEach((itemId, indice) => {
+    const naoObservado = indice === (variacao * 5) % itens.length;
+    const corrigido = variacao % 3 === 0 && indice === (variacao * 7) % itens.length;
+    db.runSync(
+      `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em, corrigido_na_hora)
+       VALUES (?, ?, ?, ?, ?)`,
+      inspecaoId,
+      itemId,
+      corrigido ? 'inadequado' : naoObservado ? 'nao_observado' : 'adequado',
+      concluidaEm.toISOString(),
+      corrigido ? 1 : 0,
+    );
+  });
+
+  return true;
 }

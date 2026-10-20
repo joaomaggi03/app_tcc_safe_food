@@ -76,8 +76,9 @@ test('toda resposta e toda trilha têm rótulo — nenhuma cai como undefined', 
     assert.ok(rotulos.ROTULO_TRILHA[trilha], `trilha sem rótulo: ${trilha}`);
     assert.ok(rotulos.DESCRICAO_TRILHA[trilha], `trilha sem descrição: ${trilha}`);
   }
-  // 'essencial' é modo legado, mas inspeções antigas ainda o exibem.
-  for (const modo of ['rotina', 'completa', 'essencial']) {
+  // 'essencial' é modo legado, mas inspeções antigas ainda o exibem;
+  // 'teste' é a diária fabricada pelas ferramentas de teste.
+  for (const modo of ['rotina', 'completa', 'essencial', 'teste']) {
     assert.ok(rotulos.ROTULO_MODO[modo], `modo sem rótulo: ${modo}`);
   }
   for (const situacao of ['em_dia', 'vence_em_breve', 'vencida', 'nunca_feita']) {

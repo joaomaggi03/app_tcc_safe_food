@@ -348,7 +348,7 @@ Sincronização de duas mãos só se justifica se o cenário for "dois aparelhos
 > - **"Ao reconectar" (6.6) é o retorno do app ao primeiro plano** (`AppState`), e não um detector de rede (`expo-network`): sem dependência nova, e cobre o caso real — quem ficou sem sinal e volta a usar o app.
 > - **Login opcional diverge do P-RF01** ("para que ele possa acessar o aplicativo"). Decisão: offline-first — exigir login travaria quem abre o app sem sinal. Ajustar o texto do TCC (seção 7).
 > - **Supabase Storage não é usado** (a proposta, P-TEC-2, cita "armazenamento de arquivos"). Candidato: o PDF do RF08.
-> - **Critério de pronto ainda não verificado:** o código está feito e testado do lado do SQLite. O projeto Supabase já existe com o schema aplicado (26/set/2026), mas o app ainda não rodou contra ele no aparelho.
+> - **Critério de pronto verificado no aparelho (27/set/2026)** contra o Supabase real: login, backup manual e automático, modo avião (app inteiro offline, subida ao voltar), restauração em aparelho limpo e bloqueio de outra conta.
 
 **Prompt sugerido para o Claude Code:**
 > "Implemente a Fase 6 em duas etapas. Primeiro o schema v10, aditivo: acrescente `uuid`, `atualizado_em` e `excluido_em` às tabelas `estabelecimento`, `inspecao`, `resposta`, `item_oculto` e `acao`, sem trocar as chaves primárias, e faça toda escrita tocar o `atualizado_em`. Depois o `db/sincronizacao.ts`, com a SUBIDA apenas (mão única), na ordem das chaves estrangeiras, usando o marcador `ultimo_sync` da tabela `meta`. O módulo não pode ser importado por `db/consultas.ts`: falha de rede tem que ser silenciosa e o app tem que funcionar inteiro offline. Mostre como testar em modo avião. Sou iniciante, então explique cada passo."
@@ -368,16 +368,16 @@ Deixe estes por último. Se implementados, viram diferencial; se não, ficam doc
 
 ## 5. Mapa Fase → Requisito → Cronograma
 
-| Fase | Requisitos | Mês previsto (cronograma da proposta) | Situação (26/set/2026) |
+| Fase | Requisitos | Mês previsto (cronograma da proposta) | Situação (27/set/2026) |
 |---|---|---|---|
 | 0 — Setup | — | Jun | ✅ concluída |
 | 1 — Dados da RDC | base p/ RF03 | Jun | ✅ concluída |
-| 2 — Perfil + checklist | RF02, RF03 | Ago | ✅ concluída |
-| 3 — Execução da inspeção | RF06, RF09 | Ago | ✅ concluída |
-| 4 — Score | RF04 | Ago | ✅ concluída |
-| 5 — Periodicidade | RF05 | Set | ✅ concluída |
-| 6 — Auth + Supabase | RF01 | Set/Out | 🟡 código feito (login opcional + backup de mão única + restauração); falta o teste no aparelho |
-| Fora do núcleo | RF07, RF08 | Out (se houver tempo) | RF07 ✅ · RF08 ⏳ não iniciado |
+| 2 — Perfil + checklist | RF02, RF03 | Jul (RF02) · Ago (RF03) | ✅ concluída |
+| 3 — Execução da inspeção | RF06, RF09 | Ago (RF06) · Set (RF09) | ✅ concluída |
+| 4 — Score | RF04 | Set | ✅ concluída |
+| 5 — Periodicidade | RF05 | Out | ✅ concluída |
+| 6 — Auth + Supabase | RF01 | Jul (feito em set) | ✅ mínima (login opcional + backup de mão única + restauração), testada no aparelho |
+| Fora do núcleo | RF07, RF08 | Out | RF07 ✅ · RF08 ⏳ não iniciado |
 | Extra (fora dos RFs) | — | — | ✅ notificação fixa de inspeção em andamento, com progresso (pedido do autor; ver CLAUDE.md) |
 
 > Na proposta, o RF01 estava marcado para **julho** — é o único requisito atrasado em relação ao cronograma dela. O RF05 e o RF07 (outubro na proposta) foram entregues antes.
@@ -398,6 +398,6 @@ Deixe estes por último. Se implementados, viram diferencial; se não, ficam doc
 
 *(Atualizado em 24/set/2026. O texto original apontava para a Fase 1, já concluída.)*
 
-1. **RF01 mínimo** — código feito (ver a revisão da Fase 6); projeto Supabase criado. Falta o roteiro no aparelho: login, backup, modo avião, restauração e outra conta.
+1. ~~**RF01 mínimo**~~ — concluído e testado no aparelho (ver a revisão da Fase 6).
 2. **RF08 — exportação em PDF:** está no resumo da proposta e no cronograma de outubro. Não depende de rede.
 3. **Revisar o texto do TCC contra o que foi construído:** ~160 diretrizes → 89 itens; "tipo e porte" → só tipo; uso adaptado das faixas da RDC 275/2002; login opcional × P-RF01; backup de mão única × "sincronização" (P-TEC-3); Storage do Supabase não usado (P-TEC-2).

@@ -50,10 +50,12 @@ import {
   type Sequencia,
   type Trilha,
 } from '../db/consultas';
+import { diaDaSemana } from '../db/datas';
 import { statusDasTrilhas, type StatusTrilha } from '../db/periodicidade';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import {
+  DIAS_SEMANA,
   faixaDoScore,
   notaSequencia,
   ROTULO_MODO,
@@ -350,17 +352,41 @@ function CartaoSequencia({ sequencia }: { sequencia: Sequencia }) {
       </View>
 
       <View style={estilos.tira}>
-        {sequencia.ultimosSete.map((dia) => (
-          <View
-            key={dia.dia}
-            style={[
-              estilos.ponto,
-              dia.fechado && estilos.pontoFechado,
-              dia.feita && estilos.pontoFeito,
-              dia.hoje && estilos.pontoHoje,
-            ]}
-          />
-        ))}
+        {sequencia.semana.map((dia) => {
+          const diaSemana = DIAS_SEMANA[diaDaSemana(dia.dia)];
+          return (
+            <View
+              key={dia.dia}
+              style={estilos.diaTira}
+              accessible
+              accessibilityLabel={
+                `${diaSemana.nome}: ` +
+                (dia.feita
+                  ? 'diária feita'
+                  : dia.futuro
+                    ? 'ainda não chegou'
+                    : dia.fechado
+                      ? 'fechado'
+                      : dia.hoje
+                        ? 'hoje, em aberto'
+                        : 'sem diária')
+              }
+            >
+              <View
+                style={[
+                  estilos.ponto,
+                  dia.fechado && estilos.pontoFechado,
+                  dia.futuro && estilos.pontoFuturo,
+                  dia.feita && estilos.pontoFeito,
+                  dia.hoje && estilos.pontoHoje,
+                ]}
+              />
+              <Text style={[estilos.letraDia, dia.hoje && estilos.letraHoje]}>
+                {diaSemana.inicial}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -662,8 +688,12 @@ const estilos = StyleSheet.create({
   },
   botaoAbrirAssimTexto: { fontSize: 14, fontWeight: '700', color: Cores.primariaTexto },
 
-  // A tirinha dos sete dias: o mais antigo à esquerda, hoje na ponta.
-  tira: { flexDirection: 'row', gap: 4 },
+  // A tirinha da semana: segunda à esquerda, domingo na ponta, com a
+  // inicial do dia embaixo de cada bolinha.
+  tira: { flexDirection: 'row', gap: 5 },
+  diaTira: { alignItems: 'center', gap: 3 },
+  letraDia: { fontSize: 9, lineHeight: 11, color: Cores.textoSuave },
+  letraHoje: { fontWeight: '700', color: Cores.texto },
   ponto: {
     width: 7,
     height: 7,
@@ -678,6 +708,10 @@ const estilos = StyleSheet.create({
   // Hoje ganha contorno para se achar na tira mesmo quando ainda não
   // está preenchido — sem ele, a ponta direita some no fundo do cartão.
   pontoHoje: { borderWidth: 1, borderColor: Cores.textoSuave },
+  // Dia que ainda não chegou: só o contorno, sem preenchimento — não é
+  // falta nem folga. Vem ANTES de `pontoFeito` pelo mesmo motivo do
+  // fechado (uma diária futura não existe, mas a ordem fica coerente).
+  pontoFuturo: { backgroundColor: 'transparent', borderWidth: 1, borderColor: Cores.borda },
 
   cartao: {
     backgroundColor: Cores.superficie,

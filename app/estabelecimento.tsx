@@ -22,8 +22,11 @@ import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
+  apagarDadosDeTeste,
   apagarDiariaDeHoje,
+  completarSemanaDeTeste,
   contarCatalogo,
+  gerarDiariasDeTeste,
   listarItensOcultos,
   listarPerfis,
   reexibirItem,
@@ -45,6 +48,7 @@ import {
   statusDasTrilhas,
 } from '../db/periodicidade';
 import { totalDiasAbertos } from '../db/funcionamento';
+import { fazerBackup } from '../db/sincronizacao';
 import { nuvemConfigurada } from '../db/supabase';
 import { useConta } from '../store/conta';
 import { useEstabelecimento } from '../store/estabelecimento';
@@ -308,6 +312,9 @@ function Periodicidade({
       {/* `__DEV__` é true só com o app rodando pelo Metro (Expo Go ou
           development build). No app instalado de verdade, some. */}
       {__DEV__ ? <BotaoRefazerDiaria estabelecimento={estabelecimento} /> : null}
+      {__DEV__ ? <BotaoGerarHistorico estabelecimento={estabelecimento} /> : null}
+      {__DEV__ ? <BotaoCompletarSemana estabelecimento={estabelecimento} /> : null}
+      {__DEV__ ? <BotaoApagarTeste estabelecimento={estabelecimento} /> : null}
     </View>
   );
 }
@@ -402,6 +409,130 @@ function BotaoRefazerDiaria({ estabelecimento }: { estabelecimento: Estabelecime
     >
       <Ionicons name="refresh-outline" size={15} color={Cores.primariaTexto} />
       <Text style={estilos.testarTexto}>Refazer a diária de hoje (teste)</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * FERRAMENTA DE TESTE: grava diárias concluídas nos dias anteriores
+ * (`gerarDiariasDeTeste`), para a sequência de dias ter o que mostrar
+ * numa demonstração. Só em modo de desenvolvimento.
+ */
+function BotaoGerarHistorico({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+      onPress={() =>
+        Alert.alert(
+          'Gerar histórico de teste?',
+          'Grava diárias concluídas nos últimos 14 dias de funcionamento que ainda não têm diária. Hoje não é alterado. São dados de teste: sobem no backup se houver conta, e saem com "Apagar dados de teste".',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Gerar',
+              onPress: () => {
+                const criadas = gerarDiariasDeTeste(estabelecimento.id);
+                if (criadas > 0) {
+                  router.replace('/');
+                } else {
+                  Alert.alert('Nada a gerar', 'Os dias anteriores já têm diária.');
+                }
+              },
+            },
+          ],
+        )
+      }
+      accessibilityRole="button"
+    >
+      <Ionicons name="calendar-outline" size={15} color={Cores.primariaTexto} />
+      <Text style={estilos.testarTexto}>Gerar histórico de diárias (teste)</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * FERRAMENTA DE TESTE: preenche a diária de segunda até hoje
+ * (`completarSemanaDeTeste`), inclusive folga e o próprio hoje, para a
+ * tira da semana aparecer cheia numa demonstração.
+ */
+function BotaoCompletarSemana({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+      onPress={() =>
+        Alert.alert(
+          'Completar a semana?',
+          'Grava a diária concluída de segunda até hoje, inclusive dias de folga e hoje. Os dias depois de hoje ficam de fora. Para fazer a diária de hoje ao vivo depois, use "Refazer a diária de hoje". São dados de teste: sobem no backup se houver conta, e saem com "Apagar dados de teste".',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Completar',
+              onPress: () => {
+                const criadas = completarSemanaDeTeste(estabelecimento.id);
+                // A diária de hoje pode ter sido concluída: o alerta muda.
+                void reagendarAlertas(estabelecimento);
+                if (criadas > 0) {
+                  router.replace('/');
+                } else {
+                  Alert.alert('Nada a completar', 'Todos os dias da semana até hoje já têm diária.');
+                }
+              },
+            },
+          ],
+        )
+      }
+      accessibilityRole="button"
+    >
+      <Ionicons name="checkmark-done-outline" size={15} color={Cores.primariaTexto} />
+      <Text style={estilos.testarTexto}>Completar a semana (teste)</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * FERRAMENTA DE TESTE: apaga as diárias fabricadas pelos dois botões
+ * acima (`apagarDadosDeTeste`, que procura `modo = 'teste'`). As diárias
+ * feitas de verdade não são tocadas. O backup em seguida leva a exclusão
+ * para a nuvem, se houver conta.
+ */
+function BotaoApagarTeste({ estabelecimento }: { estabelecimento: Estabelecimento }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+      onPress={() =>
+        Alert.alert(
+          'Apagar os dados de teste?',
+          'Apaga todas as diárias gravadas pelos botões de teste. As inspeções feitas de verdade ficam. Se houver conta, a exclusão também chega ao backup.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Apagar',
+              style: 'destructive',
+              onPress: () => {
+                const apagadas = apagarDadosDeTeste(estabelecimento.id);
+                if (apagadas > 0) {
+                  // A diária de hoje pode ter voltado a estar pendente.
+                  void reagendarAlertas(estabelecimento);
+                  void fazerBackup();
+                  router.replace('/');
+                } else {
+                  Alert.alert('Nada a apagar', 'Não há diárias de teste.');
+                }
+              },
+            },
+          ],
+        )
+      }
+      accessibilityRole="button"
+    >
+      <Ionicons name="trash-outline" size={15} color={Cores.primariaTexto} />
+      <Text style={estilos.testarTexto}>Apagar dados de teste</Text>
     </Pressable>
   );
 }

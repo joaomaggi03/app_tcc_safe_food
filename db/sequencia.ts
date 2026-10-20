@@ -23,7 +23,7 @@
  * o app não tem por que descontar isso.
  */
 
-import { diferencaEmDias, somarDias } from './datas';
+import { diaDaSemana, diferencaEmDias, somarDias } from './datas';
 import { abreNoDia, DIAS_NA_SEMANA } from './funcionamento';
 
 export type SituacaoSequencia =
@@ -38,13 +38,15 @@ export type SituacaoSequencia =
   /** Nunca houve nenhuma diária concluída. */
   | 'nenhuma';
 
-/** Um dia da tirinha dos últimos sete. */
+/** Um dia da tirinha da semana. */
 export interface DiaDaSequencia {
   dia: string;
   feita: boolean;
   /** Dia sem expediente: não conta a favor nem contra. */
   fechado: boolean;
   hoje: boolean;
+  /** Depois de hoje: ainda não aconteceu, então não é falta nem folga. */
+  futuro: boolean;
 }
 
 export interface Sequencia {
@@ -59,11 +61,15 @@ export interface Sequencia {
   situacao: SituacaoSequencia;
   /** Hoje é dia de expediente? */
   abreHoje: boolean;
-  /** Os sete últimos dias de calendário, do mais antigo para hoje. */
-  ultimosSete: DiaDaSequencia[];
+  /**
+   * A SEMANA ATUAL, de segunda a domingo — e não os sete últimos dias.
+   * Numa janela móvel a ordem dos dias da semana mudava todo dia, e
+   * ninguém sabia qual bolinha era qual. Com a semana fixa, a posição
+   * diz o dia (a tela escreve a inicial embaixo), e os dias depois de
+   * hoje vêm marcados como `futuro`.
+   */
+  semana: DiaDaSequencia[];
 }
-
-const DIAS_NA_TIRA = 7;
 
 /**
  * A sequência, a partir dos dias em que houve diária CONCLUÍDA.
@@ -82,7 +88,7 @@ export function calcularSequencia(
 
   const hojeFeita = feitos.has(hoje);
   const abreHoje = abreNoDia(diasFuncionamento, hoje);
-  const ultimosSete = montarTira(feitos, hoje, diasFuncionamento);
+  const semana = montarSemana(feitos, hoje, diasFuncionamento);
   const recorde = maiorSequencia(feitos, diasFuncionamento);
 
   /**
@@ -111,7 +117,7 @@ export function calcularSequencia(
     situacao = 'nenhuma';
   }
 
-  return { atual, recorde, situacao, abreHoje, ultimosSete };
+  return { atual, recorde, situacao, abreHoje, semana };
 }
 
 /**
@@ -160,25 +166,35 @@ function contarParaTras(
   return total;
 }
 
-/** Os sete últimos dias de calendário, do mais antigo para hoje. */
-function montarTira(
+/**
+ * A semana de hoje, de segunda a domingo.
+ *
+ * `getDay()` numera a partir do DOMINGO (0); a semana da tira começa na
+ * SEGUNDA. `(getDay() + 6) % 7` é quantos dias se passaram desde a
+ * segunda: 0 na segunda, 6 no domingo. Num domingo, portanto, a tira
+ * mostra a semana que está terminando, com hoje na ponta direita.
+ */
+function montarSemana(
   feitos: Set<string>,
   hoje: string,
   diasFuncionamento?: string | null,
 ): DiaDaSequencia[] {
-  const tira: DiaDaSequencia[] = [];
+  const desdeSegunda = (diaDaSemana(hoje) + 6) % DIAS_NA_SEMANA;
+  const segunda = somarDias(hoje, -desdeSegunda);
+  const semana: DiaDaSequencia[] = [];
 
-  for (let atras = DIAS_NA_TIRA - 1; atras >= 0; atras--) {
-    const dia = somarDias(hoje, -atras);
-    tira.push({
+  for (let i = 0; i < DIAS_NA_SEMANA; i++) {
+    const dia = somarDias(segunda, i);
+    semana.push({
       dia,
       feita: feitos.has(dia),
       fechado: !abreNoDia(diasFuncionamento, dia),
-      hoje: atras === 0,
+      hoje: i === desdeSegunda,
+      futuro: i > desdeSegunda,
     });
   }
 
-  return tira;
+  return semana;
 }
 
 /**

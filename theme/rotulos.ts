@@ -74,12 +74,14 @@ export const ROTULO_MOMENTO: Record<MomentoDia, string> = {
 
 /**
  * Os modos da trilha diária. 'Essencial' é legado — só aparece em
- * inspeções gravadas antes da rotina guiada existir.
+ * inspeções gravadas antes da rotina guiada existir. 'Teste' é a diária
+ * fabricada pelas ferramentas de teste.
  */
 export const ROTULO_MODO: Record<ModoInspecao, string> = {
   rotina: 'Rotina',
   completa: 'Completa',
   essencial: 'Essencial',
+  teste: 'Teste',
 };
 
 /** As três respostas do cartão de verificação da rotina. */
