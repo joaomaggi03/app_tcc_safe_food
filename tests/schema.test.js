@@ -62,6 +62,10 @@ test('instalação nova cria o schema inteiro', () => {
   assert.ok(colunas(db, 'item').includes('topicos'), 'item.topicos (v5)');
   assert.ok(colunas(db, 'inspecao').includes('dia_local'), 'inspecao.dia_local (v4)');
   assert.ok(colunas(db, 'estabelecimento').includes('cidade'), 'estabelecimento.cidade (v2)');
+  assert.ok(
+    colunas(db, 'estabelecimento').includes('hora_abertura'),
+    'estabelecimento.hora_abertura (v11)',
+  );
 });
 
 test('migrar é idempotente: rodar de novo não muda nada', () => {
@@ -113,7 +117,10 @@ test('atualizar de qualquer versão anterior preserva os dados do usuário', () 
         `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em)
          VALUES (1,'i1','adequado','2026-08-02T10:01:00.000Z')`,
       );
-      db.runSync("INSERT INTO item_oculto VALUES (1,'i1','2026-08-02T10:02:00.000Z')");
+      db.runSync(
+        `INSERT INTO item_oculto (estabelecimento_id, item_id, ocultado_em)
+         VALUES (1,'i1','2026-08-02T10:02:00.000Z')`,
+      );
     }
 
     migrar(db);
@@ -388,6 +395,35 @@ test('a v7 não faz nada em quem já tem a coluna', () => {
 
   assert.doesNotThrow(() => migrar(db), 'a v7 não pode tentar criar a coluna de novo');
   assert.equal(versao(db), VERSAO_SCHEMA);
+});
+
+/**
+ * v11: o horário de funcionamento. Quem já usava o app tem que acordar
+ * SEM horário — e, portanto, sem nenhum item travado por janela.
+ */
+test('a atualização da v10 cria os horários, e a linha antiga fica sem horário', () => {
+  const db = bancoVazio();
+
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 10);
+  db.runSync(
+    `INSERT INTO perfil (id, nome, descricao, periodicidade_auditoria_dias, ordem)
+     VALUES ('restaurante','Restaurante','d',30,1)`,
+  );
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Cantina da Ana','restaurante','2026-08-01',30)`,
+  );
+  assert.ok(!colunas(db, 'estabelecimento').includes('hora_abertura'), 'preparação: v10');
+
+  migrar(db);
+
+  const linha = db.getFirstSync(
+    'SELECT nome, hora_abertura, hora_fechamento FROM estabelecimento',
+  );
+  assert.equal(linha.nome, 'Cantina da Ana');
+  assert.equal(linha.hora_abertura, null);
+  assert.equal(linha.hora_fechamento, null);
 });
 
 // ---------------------------------------------------------------

@@ -48,12 +48,18 @@ import {
   statusDasTrilhas,
 } from '../db/periodicidade';
 import { totalDiasAbertos } from '../db/funcionamento';
+import { lerHorarios } from '../db/janela';
 import { fazerBackup } from '../db/sincronizacao';
 import { nuvemConfigurada } from '../db/supabase';
 import { useConta } from '../store/conta';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
-import { formatarData, ROTULO_TRILHA, textoDiasAbertos } from '../theme/rotulos';
+import {
+  formatarData,
+  ROTULO_TRILHA,
+  textoDiasAbertos,
+  textoHorarioFuncionamento,
+} from '../theme/rotulos';
 
 /** De quanto em quanto o botão mexe no intervalo da auditoria. */
 const PASSO_DIAS = 5;
@@ -147,6 +153,13 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           <Detalhe
             icone="calendar-outline"
             texto={textoDiasAbertos(totalDiasAbertos(estabelecimento.dias_funcionamento))}
+          />
+          {/* Também sempre visível: é ele que trava as etapas da diária. */}
+          <Detalhe
+            icone="time-outline"
+            texto={textoHorarioFuncionamento(
+              lerHorarios(estabelecimento.hora_abertura, estabelecimento.hora_fechamento),
+            )}
           />
         </View>
 
@@ -601,7 +614,7 @@ function Detalhe({
   icone,
   texto,
 }: {
-  icone: 'location-outline' | 'person-outline' | 'calendar-outline';
+  icone: 'location-outline' | 'person-outline' | 'calendar-outline' | 'time-outline';
   texto: string;
 }) {
   return (

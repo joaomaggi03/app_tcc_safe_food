@@ -14,6 +14,7 @@
  *   db/datas.ts            contas de data
  *   db/faixa.ts            atendimento dos itens e faixa da RDC 275
  *   db/funcionamento.ts    os dias em que o estabelecimento abre
+ *   db/janela.ts           a janela de horário de cada etapa da diária
  *   db/sequencia.ts        a sequência de dias da diária
  *   db/vencimento.ts       a regra de vencimento
  *   db/schema.ts           as migrações
@@ -81,6 +82,7 @@ module.exports = {
   datas: () => exigir('db/datas.js'),
   faixa: () => exigir('db/faixa.js'),
   funcionamento: () => exigir('db/funcionamento.js'),
+  janela: () => exigir('db/janela.js'),
   sequencia: () => exigir('db/sequencia.js'),
   vencimento: () => exigir('db/vencimento.js'),
   schema: () => exigir('db/schema.js'),

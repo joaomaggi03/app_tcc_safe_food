@@ -69,7 +69,8 @@ export interface Pacote {
 const LEITURA: Record<TabelaBackup, string> = {
   estabelecimento: `
     SELECT uuid, nome, perfil_id, data_cadastro, periodicidade_auditoria_dias,
-           cidade, responsavel, dias_funcionamento, atualizado_em
+           cidade, responsavel, dias_funcionamento, hora_abertura, hora_fechamento,
+           atualizado_em
       FROM estabelecimento
      WHERE atualizado_em >= ?`,
 
@@ -278,8 +279,9 @@ export function restaurar(
     const estabelecimentoId = db.runSync(
       `INSERT INTO estabelecimento
          (uuid, nome, perfil_id, data_cadastro, periodicidade_auditoria_dias,
-          cidade, responsavel, dias_funcionamento, atualizado_em)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          cidade, responsavel, dias_funcionamento, hora_abertura, hora_fechamento,
+          atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       e.uuid,
       e.nome,
       e.perfil_id,
@@ -288,6 +290,10 @@ export function restaurar(
       e.cidade,
       e.responsavel,
       e.dias_funcionamento,
+      // `?? null`: um backup feito antes da v11 não traz as duas colunas,
+      // e o SQLite não aceita `undefined` como parâmetro.
+      e.hora_abertura ?? null,
+      e.hora_fechamento ?? null,
       e.atualizado_em,
     ).lastInsertRowId;
 

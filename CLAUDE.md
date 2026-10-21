@@ -123,7 +123,9 @@ exportação em PDF (RF08).
     e 2 a norma amarra ao fim do trabalho. Por isso a inspeção diária fica
     **aberta o dia todo** e é concluída no fechamento, e os itens são
     marcados com `momento` (`data/rdc216.ts`) para aparecerem na ordem do
-    expediente.
+    expediente. (Desde a v11, com horário de funcionamento cadastrado, a
+    inspeção continua aberta o dia todo, mas cada ETAPA só aceita
+    resposta na sua janela — ver "Janelas de horário da diária".)
   - A diária tem dois modos: **Rotina** (as verificações guiadas de
     `data/rotina-diaria.ts`) e **Completa** (item a item). O modo fica gravado
     na inspeção, para o histórico não comparar preenchimentos diferentes.
@@ -441,8 +443,90 @@ exportação em PDF (RF08).
   - **APK do EAS sai com o backup DESLIGADO** se as variáveis
     `EXPO_PUBLIC_SUPABASE_*` não forem configuradas no EAS: o `.env.local`
     fica fora do git e não vai para o servidor de build.
-- **Próxima: RF08** — exportação em PDF. Depois, revisar o texto do TCC
-  contra o que foi construído (ver seção 7 do plano).
+- **Pedidos do orientador (reunião de 20/10/2026).** Fora dos RFs da
+  proposta — ampliação de escopo pedida pelo ORIENTADOR, decidida com o
+  autor no mesmo dia. Quatro entregas, nesta ordem, todas antes do RF08
+  (para o PDF já nascer com horários e pendências):
+  1. horário de funcionamento + janelas que travam cada etapa da diária
+     (**feita** — ver abaixo);
+  2. pendências: o item que perde a janela sem resposta vira pendência,
+     contada À PARTE (no dia e no mês, por etapa) — **não entra no score**,
+     pela mesma razão da sequência: não verificar ≠ verificar e estar
+     errado. Derivada, nunca gravada;
+  3. notificação local quando cada etapa abre (só em dia aberto, e não se
+     a etapa já foi feita), no agendamento de `db/notificacoes.ts`;
+  4. plano de ação PRONTO para um item só, como exemplo (o orientador
+     sugeriu um catálogo por item e reconheceu que para os 89 seria
+     demais). Catálogo local em `data/`, levado ao SQLite pelo seed.
+     Sugestão: `prep_11` (óleo), em que a própria RDC diz a correção. O
+     texto dos passos vem do autor, com fonte (regra 4).
+- **Janelas de horário da diária (schema v11, feito — entrega 1 acima).**
+  - O cadastro ganhou **horário de abertura e de fechamento**, opcionais,
+    em `estabelecimento.hora_abertura` / `hora_fechamento` ('HH:MM'
+    local). **NULL = sem horário = sem janela**: quem já usava o app não
+    acorda com item travado.
+  - `db/janela.ts` — módulo **puro** (padrão do `vencimento.ts`), testado
+    em `tests/janela.test.js` com as bordas escritas à mão. As janelas,
+    com o fim exclusivo: antes de abrir `[00:00, abertura+30)`, serviço
+    `[abertura, fechamento)`, fechamento `[fechamento−30, 24:00)`. As
+    **tolerâncias de 30 min são decisão do app** (`TOLERANCIA_ABERTURA`,
+    `ANTECEDENCIA_FECHAMENTO`), e as janelas se sobrepõem nas bordas de
+    propósito.
+  - **Fora da janela o item fica TRAVADO**: dá para ver a resposta, não
+    para mudar — inclusive o "Corrigi na hora" e o "não se aplica". A
+    trava vale por BLOCO (na diária a chave do bloco é o `momento`, nos
+    dois modos). O botão desabilitado é a primeira barreira; a hora é
+    conferida de novo NO TOQUE (`foraDaJanela`), porque o relógio da tela
+    só anda a cada 15 s. A REGRA mora no `janela.ts`; quem a APLICA é a
+    tela, e não o `salvarResposta`, que continua sem saber de relógio
+    nem de horário. Hoje a tela de execução é a única porta de escrita
+    de resposta pelo usuário — se surgir outra, ela tem que chamar a
+    mesma regra.
+  - **A meia-noite não reabre a diária de ontem** (achado do `fiscal`,
+    que bloqueou o primeiro commit). O relógio volta a 00:00, e com a aba
+    Hoje aberta na tela a etapa "antes de abrir" da diária de ontem
+    voltava a aceitar resposta. `situacaoDaEtapa` pergunta antes o DIA da
+    inspeção (`inspecao.dia_local`): dia passado, tudo encerrado; só no
+    próprio dia o relógio decide. O relógio da tela acompanha dia e
+    minuto.
+  - Cada resposta mostra **a hora em que foi dada** ("Respondido às
+    07:12"), lida de `resposta.respondida_em`, que já existia desde a v3.
+    Trocar a resposta troca a hora — vale a última decisão. **Só na tela
+    de execução**: o resultado e o histórico ainda não mostram a hora,
+    embora o dado esteja no banco. O PDF do RF08 deve trazê-la.
+  - **Não suportado:** fechamento depois da meia-noite (a diária é presa
+    ao `dia_local`) e horário diferente por dia da semana. Trabalho
+    futuro. O cadastro recusa o fechamento antes da abertura e orienta a
+    **deixar o horário em branco** — e não a pôr 23:59, que deixaria a
+    etapa de fechamento com meia hora e a limpeza de quem fecha à 1h
+    sempre fora dela.
+  - Expediente mínimo de 1 hora, para as duas tolerâncias caberem.
+  - **A trava é de boa-fé, e isso precisa estar no texto do TCC.** O
+    relógio que manda é o do aparelho, e o horário pode ser editado ou
+    apagado a qualquer momento, valendo na hora — apagar às 15h destrava o
+    "antes de abrir". O app registra e orienta; não fiscaliza contra quem
+    quer burlar.
+  - **Decidir antes da entrega 2:** se as pendências forem derivadas do
+    horário ATUAL do estabelecimento, mudar o horário reescreve as
+    pendências do passado — o oposto do `total_itens` congelado. A
+    alternativa é congelar o par de horários na inspeção, na abertura,
+    como já se faz com `modo` e `dia_local`. E as diárias fabricadas pelas
+    ferramentas de teste gravam todas as respostas às 18h, inclusive as de
+    "antes de abrir": vão parecer feitas fora da janela.
+  - **Supabase:** as duas colunas foram acrescentadas ao
+    `supabase/schema.sql`, com `alter table ... add column if not
+    exists` (o arquivo pode ser rodado de novo sem perigo). **Rodar o
+    arquivo de novo no SQL Editor.** Sem isso, o backup PARA INTEIRO, e
+    não só o estabelecimento: a migração v11 não carimba
+    `atualizado_em`, então nada muda até o cadastro ser editado — mas, a
+    partir daí, o estabelecimento é a primeira tabela enviada, a nuvem
+    recusa a coluna desconhecida, o envio aborta e o marcador não avança;
+    nenhuma inspeção posterior sobe. A única pista é a mensagem na tela
+    Conta. A restauração de um backup anterior à v11 entra sem horário
+    (testado).
+- **Próxima: entregas 2 a 4 dos pedidos do orientador, depois o RF08** —
+  exportação em PDF. Depois, revisar o texto do TCC contra o que foi
+  construído (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
   Histórico. Dois defeitos: o cartão de prazos do Início listava as três
   trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de

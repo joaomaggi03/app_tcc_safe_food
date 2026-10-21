@@ -23,6 +23,7 @@ import { diaComHora, diaDaSemana, diaLocalHaDias, diaLocalISO, somarDias } from 
 import { atendimentoDosItens } from './faixa';
 import { abreNoDia, normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
+import { formatarHora, lerHorarios } from './janela';
 import { calcularSequencia, type Sequencia } from './sequencia';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -106,6 +107,13 @@ export interface Estabelecimento {
    * linhas anteriores ao schema v6, lido como "abre todo dia".
    */
   dias_funcionamento: string | null;
+  /**
+   * Horário de abertura e de fechamento, 'HH:MM' local (schema v11). São
+   * a régua das janelas da diária — ver `db/janela.ts`. NULL = sem
+   * horário informado, e nenhuma etapa fica travada.
+   */
+  hora_abertura: string | null;
+  hora_fechamento: string | null;
 }
 
 /** Os campos que a tela de cadastro preenche. */
@@ -116,6 +124,14 @@ export interface DadosEstabelecimento {
   responsavel?: string;
   /** Máscara de dias de funcionamento; ausente mantém o que já está gravado. */
   diasFuncionamento?: string;
+  /**
+   * Horários já validados pela tela ('HH:MM' ou null). Ausente
+   * (`undefined`) preserva o que está gravado, como os dias; `null` GRAVA
+   * null — apagar o horário é uma escolha válida, e desliga as janelas.
+   * Os dois andam juntos: só um informado vale como os dois ausentes.
+   */
+  horaAbertura?: string | null;
+  horaFechamento?: string | null;
 }
 
 /**
@@ -182,11 +198,21 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
 
   const existente = obterEstabelecimento();
 
+  // A tela já valida, mas o banco não pode depender disso: um par torto
+  // gravado aqui travaria itens por uma régua quebrada. `lerHorarios` é
+  // a mesma régua que a execução usa, então o que passa aqui é o que vale lá.
+  const informados = dados.horaAbertura !== undefined && dados.horaFechamento !== undefined;
+  const horarios = informados
+    ? lerHorarios(dados.horaAbertura, dados.horaFechamento)
+    : lerHorarios(existente?.hora_abertura, existente?.hora_fechamento);
+  const horaAbertura = horarios ? formatarHora(horarios.abertura) : null;
+  const horaFechamento = horarios ? formatarHora(horarios.fechamento) : null;
+
   if (existente) {
     db.runSync(
       `UPDATE estabelecimento
           SET nome = ?, perfil_id = ?, cidade = ?, responsavel = ?,
-              dias_funcionamento = ?
+              dias_funcionamento = ?, hora_abertura = ?, hora_fechamento = ?
         WHERE id = ?`,
       dados.nome.trim(),
       dados.perfilId,
@@ -195,14 +221,16 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
       // Sem valor informado, preserva o que está gravado — a tela de
       // cadastro é a mesma da edição e pode salvar sem tocar no campo.
       normalizarFuncionamento(dados.diasFuncionamento ?? existente.dias_funcionamento),
+      horaAbertura,
+      horaFechamento,
       existente.id,
     );
   } else {
     db.runSync(
       `INSERT INTO estabelecimento
          (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias, cidade, responsavel,
-          dias_funcionamento)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          dias_funcionamento, hora_abertura, hora_fechamento)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       dados.nome.trim(),
       dados.perfilId,
       diaLocalISO(),
@@ -210,6 +238,8 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
       ouNulo(dados.cidade),
       ouNulo(dados.responsavel),
       normalizarFuncionamento(dados.diasFuncionamento),
+      horaAbertura,
+      horaFechamento,
     );
   }
 
@@ -834,6 +864,25 @@ export function respostasDaInspecao(inspecaoId: number): Record<string, Resposta
 }
 
 /**
+ * A HORA de cada resposta da inspeção (`respondida_em`, UTC ISO).
+ *
+ * É o registro que o orientador pediu: quando cada verificação foi
+ * feita. Trocar a resposta troca a hora — vale a última decisão.
+ */
+export function horasDasRespostas(inspecaoId: number): Record<string, string> {
+  const linhas = obterBanco().getAllSync<{ item_id: string; respondida_em: string }>(
+    'SELECT item_id, respondida_em FROM resposta WHERE inspecao_id = ?',
+    inspecaoId,
+  );
+
+  const mapa: Record<string, string> = {};
+  for (const linha of linhas) {
+    mapa[linha.item_id] = linha.respondida_em;
+  }
+  return mapa;
+}
+
+/**
  * Grava (ou troca) a resposta de um item — e cuida do RF09 de quebra.
  *
  * GRAVA NA HORA, a cada toque, em vez de esperar um botão "salvar" no
@@ -847,13 +896,16 @@ export function respostasDaInspecao(inspecaoId: number): Record<string, Resposta
  * O efeito colateral no fim é o RF09, nas duas direções: marcar "não se
  * aplica" oculta o item nas próximas inspeções; trocar para qualquer
  * outra resposta desfaz o ocultamento.
+ *
+ * Devolve a hora gravada, para a tela mostrar "às 07:12" sem reler o banco.
  */
 export function salvarResposta(
   inspecaoId: number,
   itemId: string,
   resposta: Resposta,
-): void {
+): string {
   const db = obterBanco();
+  const quando = agoraISO();
 
   db.runSync(
     `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em)
@@ -867,7 +919,7 @@ export function salvarResposta(
     inspecaoId,
     itemId,
     resposta,
-    agoraISO(),
+    quando,
   );
 
   // De qual estabelecimento é esta inspeção? O RF09 é por estabelecimento,
@@ -876,13 +928,14 @@ export function salvarResposta(
     'SELECT estabelecimento_id FROM inspecao WHERE id = ?',
     inspecaoId,
   );
-  if (!dono) return;
+  if (!dono) return quando;
 
   if (resposta === 'nao_se_aplica') {
     ocultarItem(dono.estabelecimento_id, itemId);
   } else {
     reexibirItem(dono.estabelecimento_id, itemId);
   }
+  return quando;
 }
 
 /**

@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 10;
+export const VERSAO_SCHEMA = 11;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -476,6 +476,25 @@ ${semUuid('item_oculto')}
   END;
 `;
 
+/**
+ * v11: O HORÁRIO DE FUNCIONAMENTO — a régua das janelas da diária.
+ *
+ * Pedido do orientador (20/10/2026): saber se cada etapa da diária foi
+ * feita na hora certa. A regra mora em `db/janela.ts`; aqui só nascem as
+ * duas colunas, em 'HH:MM' no horário local.
+ *
+ * NULL nas linhas antigas = sem horário = sem janela, e tudo continua
+ * aberto o dia todo, como antes. Ninguém que já usava o app acorda com
+ * itens travados que nunca pediu para travar.
+ *
+ * TEXT, e não minutos em INTEGER: é o formato que se lê no banco e no
+ * backup sem conta nenhuma, e a conversão é uma linha no `janela.ts`.
+ */
+const SCHEMA_V11 = `
+  ALTER TABLE estabelecimento ADD COLUMN hora_abertura   TEXT;
+  ALTER TABLE estabelecimento ADD COLUMN hora_fechamento TEXT;
+`;
+
 /** Essa tabela já tem essa coluna? */
 function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
   return db
@@ -536,6 +555,10 @@ export function migrar(db: SQLiteDatabase): void {
 
   if (versaoAtual < 10) {
     db.execSync(SCHEMA_V10);
+  }
+
+  if (versaoAtual < 11) {
+    db.execSync(SCHEMA_V11);
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

@@ -21,6 +21,13 @@ import type {
   Trilha,
 } from '../db/consultas';
 import type { GrupoRdc275 } from '../db/faixa';
+import {
+  formatarHora,
+  terminaNoFimDoDia,
+  type Horarios,
+  type Janela,
+  type SituacaoJanela,
+} from '../db/janela';
 import type { SituacaoTrilha, StatusTrilha } from '../db/periodicidade';
 
 /** Nome de cada trilha de periodicidade. */
@@ -172,6 +179,45 @@ export const DIAS_SEMANA: { inicial: string; nome: string }[] = [
 export function textoDiasAbertos(total: number): string {
   if (total === 7) return 'Abre todos os dias.';
   return `Abre ${total} ${total === 1 ? 'dia' : 'dias'} por semana.`;
+}
+
+// ---------------------------------------------------------------
+// HORÁRIO E JANELAS DA DIÁRIA (schema v11)
+// ---------------------------------------------------------------
+
+/** "Abre às 07:00 e fecha às 22:00" — ou o aviso de que não há janela. */
+export function textoHorarioFuncionamento(horarios: Horarios | null): string {
+  if (!horarios) return 'Sem horário informado: a diária fica liberada o dia todo.';
+  return `Abre às ${formatarHora(horarios.abertura)} e fecha às ${formatarHora(horarios.fechamento)}.`;
+}
+
+/**
+ * A linha embaixo do título de cada etapa da diária: quando ela pode ser
+ * respondida.
+ *
+ * Diz a HORA, e não só "encerrada": quem vê o item travado precisa saber
+ * se perdeu a janela ou se ela ainda vai abrir — e quando.
+ */
+export function textoJanela(situacao: SituacaoJanela, janela: Janela): string {
+  switch (situacao) {
+    case 'ainda_nao':
+      return `Libera às ${formatarHora(janela.inicio)}`;
+    case 'aberta':
+      return terminaNoFimDoDia(janela)
+        ? 'Aberta até o fim do dia'
+        : `Aberta até ${formatarHora(janela.fim)}`;
+    case 'encerrada':
+      // O fechamento só encerra na virada do dia — e "24:00" não é hora.
+      return terminaNoFimDoDia(janela)
+        ? 'Encerrada à meia-noite'
+        : `Encerrada às ${formatarHora(janela.fim)}`;
+  }
+}
+
+/** "às 07:12" — a hora local em que uma resposta foi dada. */
+export function textoHoraResposta(iso: string): string {
+  const data = new Date(iso);
+  return `às ${formatarHora(data.getHours() * 60 + data.getMinutes())}`;
 }
 
 // ---------------------------------------------------------------

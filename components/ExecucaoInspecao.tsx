@@ -35,6 +35,13 @@
  *
  * Recolher importa: a diária completa tem 32 itens e a auditoria passa
  * de 60. Numa lista contínua, achar onde você parou vira rolagem cega.
+ *
+ * AS JANELAS DE HORÁRIO (schema v11, pedido do orientador): na diária,
+ * se o estabelecimento informou quando abre e fecha, cada bloco — que é
+ * uma etapa do expediente — só aceita resposta na janela dela
+ * (`db/janela.ts`). Fora dela os botões ficam travados e o cabeçalho do
+ * bloco diz quando a etapa libera ou encerrou. Cada resposta mostra a
+ * hora em que foi dada. Sem horário cadastrado, nada disso aparece.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +49,7 @@ import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
+  AppState,
   Pressable,
   SectionList,
   StyleSheet,
@@ -57,6 +65,7 @@ import {
   concluirInspecao,
   corrigidosNaHora,
   estadoDaVerificacao,
+  horasDasRespostas,
   iniciarInspecao,
   marcarCorrigidoNaHora,
   respostasDaInspecao,
@@ -66,11 +75,21 @@ import {
   type EstadoVerificacao,
   type ItemChecklist,
   type ModoInspecao,
+  type MomentoDia,
   type Resposta,
   type SecaoCategoria,
   type Trilha,
   type VerificacaoChecklist,
 } from '../db/consultas';
+import { diaLocalISO } from '../db/datas';
+import {
+  janelaDoMomento,
+  lerHorarios,
+  minutoDoDia,
+  situacaoDaEtapa,
+  type Horarios,
+  type SituacaoJanela,
+} from '../db/janela';
 import { encerrarAndamento, mostrarAndamento, reagendarAlertas } from '../db/notificacoes';
 import { fazerBackup } from '../db/sincronizacao';
 import Cores from '../theme/cores';
@@ -80,6 +99,8 @@ import {
   ROTULO_RESPOSTA,
   ROTULO_TRILHA,
   ROTULO_TRILHA_CURTO,
+  textoHoraResposta,
+  textoJanela,
 } from '../theme/rotulos';
 
 /**
@@ -119,6 +140,85 @@ function itensDoBloco(bloco: Bloco): ItemChecklist[] {
     return bloco.verificacoes.flatMap((verificacao) => verificacao.itens);
   }
   return (bloco.secoes ?? []).flatMap((secao) => secao.itens);
+}
+
+const MOMENTOS: MomentoDia[] = ['abertura', 'servico', 'fechamento'];
+
+/**
+ * A etapa do expediente que um bloco representa — ou null.
+ *
+ * Na diária, a chave do bloco É o momento (é assim que o `consultas.ts`
+ * agrupa, nos dois modos). Nas outras trilhas a chave é a seção da RDC,
+ * e não há janela.
+ */
+function momentoDoBloco(bloco: Bloco): MomentoDia | null {
+  return MOMENTOS.find((momento) => momento === bloco.chave) ?? null;
+}
+
+/** Agora: o dia local e o minuto do dia — o que as janelas precisam saber. */
+interface Agora {
+  dia: string;
+  minuto: number;
+}
+
+function lerAgora(): Agora {
+  const data = new Date();
+  return { dia: diaLocalISO(data), minuto: minutoDoDia(data) };
+}
+
+/**
+ * A situação da janela de um bloco: sem etapa ou sem horário, sempre
+ * aberta. O dia da inspeção entra na conta para a meia-noite não reabrir
+ * a diária de ontem (ver `situacaoDaEtapa`).
+ */
+function situacaoDoBloco(
+  bloco: Bloco,
+  horarios: Horarios | null,
+  diaDaInspecao: string | null,
+  agora: Agora,
+): SituacaoJanela {
+  const momento = momentoDoBloco(bloco);
+  return momento
+    ? situacaoDaEtapa(momento, horarios, diaDaInspecao, agora.dia, agora.minuto)
+    : 'aberta';
+}
+
+/**
+ * O relógio da tela — dia e minuto, que avançam sozinhos e abrem e
+ * fecham as janelas com a tela aberta.
+ *
+ * Confere a cada 15 segundos, mas só redesenha quando o minuto (ou o
+ * dia) muda: devolver o MESMO objeto faz o React ignorar o `set`. E
+ * confere de novo ao voltar para o app: com ele em segundo plano o
+ * temporizador pode ter parado, e a tela não pode reabrir mostrando a
+ * janela de duas horas atrás.
+ *
+ * Desligado (sem horário cadastrado, ou fora da diária), não roda nada.
+ */
+function useAgora(ligado: boolean): [Agora, () => void] {
+  const [agora, setAgora] = useState(lerAgora);
+  const atualizar = useCallback(
+    () =>
+      setAgora((atual) => {
+        const novo = lerAgora();
+        return novo.dia === atual.dia && novo.minuto === atual.minuto ? atual : novo;
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!ligado) return;
+    const relogio = setInterval(atualizar, 15_000);
+    const assinatura = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') atualizar();
+    });
+    return () => {
+      clearInterval(relogio);
+      assinatura.remove();
+    };
+  }, [ligado, atualizar]);
+
+  return [agora, atualizar];
 }
 
 export function ExecucaoInspecao({
@@ -192,10 +292,76 @@ export function ExecucaoInspecao({
 
   const itens = useMemo(() => grupos.flatMap(itensDoBloco), [grupos]);
 
+  /**
+   * A régua das janelas: só na diária, e só com horário cadastrado.
+   * Memorizado pelas duas strings, senão `lerHorarios` criaria um objeto
+   * novo a cada renderização e tudo que depende dele recalcularia à toa.
+   */
+  const horarios = useMemo(
+    () =>
+      trilha === 'diario'
+        ? lerHorarios(estabelecimento.hora_abertura, estabelecimento.hora_fechamento)
+        : null,
+    [trilha, estabelecimento.hora_abertura, estabelecimento.hora_fechamento],
+  );
+  const [agora, atualizarAgora] = useAgora(horarios !== null);
+
+  /** Situação da janela de cada bloco, agora. */
+  const janelas = useMemo(() => {
+    const mapa: Record<string, SituacaoJanela> = {};
+    for (const grupo of grupos) {
+      mapa[grupo.chave] = situacaoDoBloco(grupo, horarios, inspecao.dia_local, agora);
+    }
+    return mapa;
+  }, [grupos, horarios, inspecao.dia_local, agora]);
+
+  /**
+   * De que etapa é cada item — a do BLOCO em que ele aparece, que é a
+   * que o usuário está vendo. Na rotina, um item fica no bloco da sua
+   * verificação.
+   */
+  const momentoDoItem = useMemo(() => {
+    const mapa: Record<string, MomentoDia> = {};
+    for (const grupo of grupos) {
+      const momento = momentoDoBloco(grupo);
+      if (!momento) continue;
+      for (const item of itensDoBloco(grupo)) mapa[item.id] = momento;
+    }
+    return mapa;
+  }, [grupos]);
+
+  /**
+   * A última palavra sobre a janela, conferida NO TOQUE.
+   *
+   * Os botões já ficam travados fora da janela, mas o relógio da tela só
+   * avança a cada 15 segundos: quem toca às 07:30:05 pode ainda ver o
+   * botão liberado. Aqui a hora é lida na hora, e o toque fora da janela
+   * é recusado com o motivo.
+   */
+  function foraDaJanela(itemId: string): boolean {
+    const momento = momentoDoItem[itemId];
+    if (!horarios || !momento) return false;
+
+    const ja = lerAgora();
+    const situacao = situacaoDaEtapa(momento, horarios, inspecao.dia_local, ja.dia, ja.minuto);
+    if (situacao === 'aberta') return false;
+
+    atualizarAgora();
+    const etapa = grupos.find((grupo) => grupo.chave === momento)?.titulo ?? 'Esta etapa';
+    Alert.alert(
+      'Fora do horário desta etapa',
+      `${etapa}: ${textoJanela(situacao, janelaDoMomento(momento, horarios)).toLowerCase()}.`,
+    );
+    return true;
+  }
+
   // Cópia em memória das respostas, para a tela reagir a cada toque.
   // A verdade continua sendo o banco: aqui começamos lendo dele, o que
   // é o que faz uma inspeção retomada aparecer já preenchida.
   const [respostas, setRespostas] = useState(() => respostasDaInspecao(inspecao.id));
+
+  /** A hora de cada resposta — o registro de QUANDO cada verificação foi feita. */
+  const [horas, setHoras] = useState(() => horasDasRespostas(inspecao.id));
 
   /**
    * Os inadequados CORRIGIDOS NA HORA (schema v9) — só na diária.
@@ -207,20 +373,27 @@ export function ExecucaoInspecao({
   const podeCorrigirNaHora = aceitaCorrecaoNaHora(trilha);
   const [corrigidos, setCorrigidos] = useState(() => corrigidosNaHora(inspecao.id));
 
-  // A lista redesenha quando QUALQUER um dos dois muda. O `useMemo` é para
+  // A lista redesenha quando QUALQUER um destes muda. O `useMemo` é para
   // não criar um objeto novo a cada renderização — a rolagem também
   // renderiza a tela, e isso faria a lista inteira redesenhar à toa.
-  const estadoDaLista = useMemo(() => ({ respostas, corrigidos }), [respostas, corrigidos]);
+  const estadoDaLista = useMemo(
+    () => ({ respostas, corrigidos, horas, janelas }),
+    [respostas, corrigidos, horas, janelas],
+  );
 
   /**
    * Quais blocos estão abertos.
    *
-   * Começa só com o primeiro: abrir todos devolveria a lista quilométrica
-   * que estamos justamente tentando evitar.
+   * Começa só com UM: abrir todos devolveria a lista quilométrica que
+   * estamos justamente tentando evitar. Com janelas, é o primeiro bloco
+   * que aceita resposta agora — abrir às 15h no "antes de abrir", já
+   * encerrado, mostraria uma lista inteira travada.
    */
-  const [abertos, setAbertos] = useState<string[]>(() =>
-    grupos.length > 0 ? [grupos[0].chave] : [],
-  );
+  const [abertos, setAbertos] = useState<string[]>(() => {
+    const liberado = grupos.find((grupo) => janelas[grupo.chave] === 'aberta');
+    const primeiro = liberado ?? grupos[0];
+    return primeiro ? [primeiro.chave] : [];
+  });
 
   function alternar(chave: string) {
     setAbertos((atual) =>
@@ -327,14 +500,20 @@ export function ExecucaoInspecao({
 
   /** Responde de uma vez todos os itens cobertos por uma verificação. */
   function responderVerificacao(verificacao: VerificacaoChecklist, resposta: Resposta) {
+    // Os itens de uma verificação estão no mesmo bloco: conferir um basta.
+    const primeiro = verificacao.itens[0];
+    if (primeiro && foraDaJanela(primeiro.id)) return;
+
+    const gravadas: Record<string, string> = {};
     for (const item of verificacao.itens) {
-      salvarResposta(inspecao.id, item.id, resposta);
+      gravadas[item.id] = salvarResposta(inspecao.id, item.id, resposta);
     }
     setRespostas((atual) => {
       const novo = { ...atual };
       for (const item of verificacao.itens) novo[item.id] = resposta;
       return novo;
     });
+    setHoras((atual) => ({ ...atual, ...gravadas }));
     // A verificação só responde "conforme" ou "não observado": nenhum dos
     // dois é inadequado, então a marca de corrigido some (o banco já a
     // apagou no `salvarResposta`).
@@ -363,8 +542,13 @@ export function ExecucaoInspecao({
   }, [inspecao.id, trilha, modo, respondidos, itens.length]);
 
   function gravar(itemId: string, resposta: Resposta) {
-    salvarResposta(inspecao.id, itemId, resposta);
+    // Conferido aqui, e não só no toque: o "não se aplica" passa por um
+    // alerta de confirmação, e a janela pode fechar enquanto ele está aberto.
+    if (foraDaJanela(itemId)) return;
+
+    const quando = salvarResposta(inspecao.id, itemId, resposta);
     setRespostas((atual) => ({ ...atual, [itemId]: resposta }));
+    setHoras((atual) => ({ ...atual, [itemId]: quando }));
     // Mesma regra do banco: "corrigido na hora" só existe em inadequado.
     if (resposta !== 'inadequado') {
       setCorrigidos((atual) => atual.filter((id) => id !== itemId));
@@ -372,6 +556,7 @@ export function ExecucaoInspecao({
   }
 
   function alternarCorrigido(itemId: string) {
+    if (foraDaJanela(itemId)) return;
     const corrigir = !corrigidos.includes(itemId);
     marcarCorrigidoNaHora(inspecao.id, itemId, corrigir);
     setCorrigidos((atual) =>
@@ -386,6 +571,8 @@ export function ExecucaoInspecao({
     const jaMarcado = respostas[item.id] === 'nao_se_aplica';
 
     if (resposta === 'nao_se_aplica' && !jaMarcado) {
+      // Antes do alerta: não faz sentido confirmar o que vai ser recusado.
+      if (foraDaJanela(item.id)) return;
       Alert.alert(
         'Marcar como "não se aplica"?',
         `O item ${item.codigo_rdc} deixará de aparecer nas próximas inspeções deste ` +
@@ -474,17 +661,32 @@ export function ExecucaoInspecao({
               aoAlternarTodos={alternarTodos}
               aoMedirBotao={aoMedirBotao}
               botaoNoHeader={botaoNoHeader}
+              comJanela={horarios !== null}
             />
           </>
         }
-        renderSectionHeader={({ section }) => (
-          <CabecalhoGrupo
-            grupo={section.grupo}
-            aberto={abertos.includes(section.grupo.chave)}
-            respondidos={contarRespondidos(section.grupo, respostas)}
-            aoAlternar={() => alternar(section.grupo.chave)}
-          />
-        )}
+        renderSectionHeader={({ section }) => {
+          const momento = momentoDoBloco(section.grupo);
+          return (
+            <CabecalhoGrupo
+              grupo={section.grupo}
+              aberto={abertos.includes(section.grupo.chave)}
+              respondidos={contarRespondidos(section.grupo, respostas)}
+              aoAlternar={() => alternar(section.grupo.chave)}
+              janela={
+                horarios && momento
+                  ? {
+                      situacao: janelas[section.grupo.chave],
+                      texto: textoJanela(
+                        janelas[section.grupo.chave],
+                        janelaDoMomento(momento, horarios),
+                      ),
+                    }
+                  : null
+              }
+            />
+          );
+        }}
         renderItem={({ item: linha, section }) => {
           if (linha.tipo === 'secao') {
             // Só a diária completa mostra a seção da RDC lá dentro; nas
@@ -492,6 +694,8 @@ export function ExecucaoInspecao({
             // redundante.
             return section.grupo.subdividido ? <CabecalhoSecao linha={linha} /> : null;
           }
+
+          const travado = janelas[section.grupo.chave] !== 'aberta';
 
           if (linha.tipo === 'verificacao') {
             return (
@@ -501,6 +705,8 @@ export function ExecucaoInspecao({
                 detalhado={detalhadas.includes(linha.verificacao.id)}
                 aoResponder={(resposta) => responderVerificacao(linha.verificacao, resposta)}
                 aoDetalhar={(abrir) => alternarDetalhe(linha.verificacao.id, abrir)}
+                travado={travado}
+                hora={ultimaHora(linha.verificacao.itens, horas)}
               />
             );
           }
@@ -514,6 +720,8 @@ export function ExecucaoInspecao({
               corrigivel={podeCorrigirNaHora}
               corrigido={corrigidos.includes(linha.item.id)}
               aoAlternarCorrigido={() => alternarCorrigido(linha.item.id)}
+              travado={travado}
+              hora={horas[linha.item.id] ?? null}
             />
           );
         }}
@@ -644,6 +852,19 @@ function contarRespondidos(bloco: Bloco, respostas: Record<string, Resposta>): n
   return itensDoBloco(bloco).filter((item) => respostas[item.id]).length;
 }
 
+/**
+ * A hora mais recente entre as respostas de uma verificação — ou null se
+ * nenhum item foi respondido. O ISO em UTC ordena como texto.
+ */
+function ultimaHora(itens: ItemChecklist[], horas: Record<string, string>): string | null {
+  let ultima: string | null = null;
+  for (const item of itens) {
+    const hora = horas[item.id];
+    if (hora && (ultima === null || hora > ultima)) ultima = hora;
+  }
+  return ultima;
+}
+
 function Cabecalho({
   nome,
   trilha,
@@ -654,7 +875,10 @@ function Cabecalho({
   aoAlternarTodos,
   aoMedirBotao,
   botaoNoHeader,
+  comJanela,
 }: {
+  /** Há horário cadastrado, e portanto janelas nesta diária? */
+  comJanela: boolean;
   nome: string;
   trilha: Trilha;
   modo: ModoInspecao;
@@ -706,7 +930,9 @@ function Cabecalho({
         <Ionicons name="save-outline" size={14} color={Cores.sobrePrimariaClara} />
         <Text style={estilos.dicaTexto}>
           {trilha === 'diario'
-            ? 'Esta inspeção fica aberta o dia todo: marque cada item na hora em que acontecer e conclua no fim do expediente.'
+            ? comJanela
+              ? 'Cada etapa só aceita resposta no horário dela. Marque cada item na hora em que acontecer e conclua no fim do expediente.'
+              : 'Esta inspeção fica aberta o dia todo: marque cada item na hora em que acontecer e conclua no fim do expediente.'
             : 'Cada resposta é salva na hora, no aparelho. Pode fechar o app e voltar depois.'}
         </Text>
       </View>
@@ -765,13 +991,17 @@ function CabecalhoGrupo({
   aberto,
   respondidos,
   aoAlternar,
+  janela,
 }: {
   grupo: Bloco;
   aberto: boolean;
   respondidos: number;
   aoAlternar: () => void;
+  /** A janela da etapa — null fora da diária ou sem horário cadastrado. */
+  janela: { situacao: SituacaoJanela; texto: string } | null;
 }) {
   const completo = respondidos === grupo.total;
+  const fechada = janela !== null && janela.situacao !== 'aberta';
 
   return (
     <Pressable
@@ -783,10 +1013,31 @@ function CabecalhoGrupo({
       onPress={aoAlternar}
       accessibilityRole="button"
       accessibilityState={{ expanded: aberto }}
-      accessibilityLabel={`${grupo.titulo}, ${respondidos} de ${grupo.total} respondidos`}
+      accessibilityLabel={
+        `${grupo.titulo}, ${respondidos} de ${grupo.total} respondidos` +
+        (janela ? `. ${janela.texto}` : '')
+      }
     >
-      <Text style={estilos.etiquetaGrupo}>{grupo.etiqueta}</Text>
-      <Text style={estilos.tituloGrupo}>{grupo.titulo}</Text>
+      <Text style={[estilos.etiquetaGrupo, fechada && estilos.etiquetaGrupoFechada]}>
+        {grupo.etiqueta}
+      </Text>
+      <View style={estilos.flex}>
+        <Text style={estilos.tituloGrupo}>{grupo.titulo}</Text>
+        {/* Quando a etapa pode ser respondida. Sempre visível com janela,
+            inclusive aberta: "aberta até 07:30" é o que evita perder a hora. */}
+        {janela ? (
+          <View style={estilos.janela}>
+            <Ionicons
+              name={fechada ? 'lock-closed-outline' : 'time-outline'}
+              size={12}
+              color={fechada ? Cores.textoSuave : Cores.primariaTexto}
+            />
+            <Text style={[estilos.janelaTexto, fechada && estilos.janelaTextoFechada]}>
+              {janela.texto}
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
       {/* Com o bloco fechado, este contador é a única pista de progresso
           — por isso ele fica sempre visível, aberto ou não. */}
@@ -820,12 +1071,18 @@ function CartaoVerificacao({
   detalhado,
   aoResponder,
   aoDetalhar,
+  travado,
+  hora,
 }: {
   verificacao: VerificacaoChecklist;
   estado: EstadoVerificacao;
   detalhado: boolean;
   aoResponder: (resposta: Resposta) => void;
   aoDetalhar: (abrir?: boolean) => void;
+  /** Fora da janela da etapa: dá para ver, não para responder. */
+  travado: boolean;
+  /** A hora da resposta mais recente entre os itens cobertos. */
+  hora: string | null;
 }) {
   // Igual aos itens: cada cartão lembra sozinho se está com o enunciado
   // completo aberto, para abrir um não redesenhar a lista inteira.
@@ -886,9 +1143,14 @@ function CartaoVerificacao({
       <View style={estilos.botoes}>
         <Pressable
           onPress={() => aoResponder('adequado')}
-          style={[estilos.botao, estado === 'conforme' && estiloEscolhido.adequado]}
+          disabled={travado}
+          style={[
+            estilos.botao,
+            estado === 'conforme' && estiloEscolhido.adequado,
+            travado && estilos.botaoTravado,
+          ]}
           accessibilityRole="radio"
-          accessibilityState={{ selected: estado === 'conforme' }}
+          accessibilityState={{ selected: estado === 'conforme', disabled: travado }}
         >
           <Text
             style={[
@@ -906,8 +1168,14 @@ function CartaoVerificacao({
             score sem motivo. */}
         <Pressable
           onPress={() => aoDetalhar(true)}
-          style={[estilos.botao, estado === 'nao_conforme' && estiloEscolhido.inadequado]}
+          disabled={travado}
+          style={[
+            estilos.botao,
+            estado === 'nao_conforme' && estiloEscolhido.inadequado,
+            travado && estilos.botaoTravado,
+          ]}
           accessibilityRole="button"
+          accessibilityState={{ disabled: travado }}
         >
           <Text
             style={[
@@ -921,9 +1189,14 @@ function CartaoVerificacao({
 
         <Pressable
           onPress={() => aoResponder('nao_observado')}
-          style={[estilos.botao, estado === 'nao_avaliado' && estiloEscolhido.nao_observado]}
+          disabled={travado}
+          style={[
+            estilos.botao,
+            estado === 'nao_avaliado' && estiloEscolhido.nao_observado,
+            travado && estilos.botaoTravado,
+          ]}
           accessibilityRole="radio"
-          accessibilityState={{ selected: estado === 'nao_avaliado' }}
+          accessibilityState={{ selected: estado === 'nao_avaliado', disabled: travado }}
         >
           <Text
             style={[
@@ -942,11 +1215,15 @@ function CartaoVerificacao({
         </Pressable>
       </View>
 
-      {estado === 'parcial' ? (
+      {/* "Ver os itens" continua livre mesmo travado: olhar o que foi
+          respondido não é responder. */}
+      {estado === 'parcial' && !travado ? (
         <Text style={estilos.avisoParcial}>
           Respondida em parte — abra os itens para completar.
         </Text>
       ) : null}
+
+      {hora ? <Text style={estilos.horaResposta}>Respondida {textoHoraResposta(hora)}</Text> : null}
     </View>
   );
 }
@@ -971,6 +1248,8 @@ function LinhaItem({
   corrigivel,
   corrigido,
   aoAlternarCorrigido,
+  travado,
+  hora,
 }: {
   item: ItemChecklist;
   resposta: Resposta | undefined;
@@ -981,6 +1260,10 @@ function LinhaItem({
   corrigivel: boolean;
   corrigido: boolean;
   aoAlternarCorrigido: () => void;
+  /** Fora da janela da etapa: a resposta fica à mostra, mas não muda. */
+  travado: boolean;
+  /** Quando a resposta foi dada (UTC ISO), ou null se ainda não foi. */
+  hora: string | null;
 }) {
   // Cada item lembra sozinho se está com a norma aberta. Guardar isso na
   // tela inteira faria a lista redesenhar por causa de um item só.
@@ -1069,9 +1352,14 @@ function LinhaItem({
             <Pressable
               key={opcao}
               onPress={() => aoResponder(opcao)}
-              style={[estilos.botao, escolhida && estiloEscolhido[opcao]]}
+              disabled={travado}
+              style={[
+                estilos.botao,
+                escolhida && estiloEscolhido[opcao],
+                travado && estilos.botaoTravado,
+              ]}
               accessibilityRole="radio"
-              accessibilityState={{ selected: escolhida }}
+              accessibilityState={{ selected: escolhida, disabled: travado }}
               accessibilityLabel={ROTULO_RESPOSTA[opcao]}
             >
               <Text style={[estilos.botaoTexto, escolhida && estiloTextoEscolhido[opcao]]}>
@@ -1087,13 +1375,15 @@ function LinhaItem({
       {corrigivel && resposta === 'inadequado' ? (
         <Pressable
           onPress={aoAlternarCorrigido}
+          disabled={travado}
           style={({ pressed }) => [
             estilos.corrigido,
             corrigido && estilos.corrigidoMarcado,
             pressed && estilos.pressionado,
+            travado && estilos.botaoTravado,
           ]}
           accessibilityRole="checkbox"
-          accessibilityState={{ checked: corrigido }}
+          accessibilityState={{ checked: corrigido, disabled: travado }}
         >
           <Ionicons
             name={corrigido ? 'checkbox' : 'square-outline'}
@@ -1110,6 +1400,8 @@ function LinhaItem({
           </View>
         </Pressable>
       ) : null}
+
+      {hora ? <Text style={estilos.horaResposta}>Respondido {textoHoraResposta(hora)}</Text> : null}
     </View>
   );
 }
@@ -1257,9 +1549,15 @@ const estilos = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
   },
-  tituloGrupo: { flex: 1, fontSize: 15, fontWeight: '700', color: Cores.texto },
+  tituloGrupo: { fontSize: 15, fontWeight: '700', color: Cores.texto },
   contagemGrupo: { fontSize: 13, fontWeight: '600', color: Cores.textoSuave },
   contagemCompleta: { color: Cores.primariaTexto },
+  // A etiqueta da etapa perde a cor quando a janela não está aberta: dá
+  // para ver de longe, com tudo recolhido, qual etapa aceita resposta.
+  etiquetaGrupoFechada: { backgroundColor: Cores.textoSuave },
+  janela: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  janelaTexto: { fontSize: 12, fontWeight: '600', color: Cores.primariaTexto },
+  janelaTextoFechada: { color: Cores.textoSuave },
 
   // --- seção da RDC dentro do bloco (segundo nível) ---
   secao: {
@@ -1377,6 +1675,10 @@ const estilos = StyleSheet.create({
     backgroundColor: Cores.fundo,
   },
   botaoTexto: { fontSize: 13, fontWeight: '600', color: Cores.textoSecundario },
+  // Travado fora da janela: apagado, mas com a resposta escolhida ainda
+  // legível — o que foi respondido na hora certa continua valendo.
+  botaoTravado: { opacity: 0.45 },
+  horaResposta: { fontSize: 11, color: Cores.textoSuave, marginTop: 8 },
 
   botaoConcluir: {
     flexDirection: 'row',

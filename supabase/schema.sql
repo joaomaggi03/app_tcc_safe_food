@@ -35,8 +35,20 @@ create table if not exists public.estabelecimento (
   cidade                        text,
   responsavel                   text,
   dias_funcionamento            text,
+  hora_abertura                 text,
+  hora_fechamento               text,
   atualizado_em                 text not null
 );
+
+-- Colunas que chegaram DEPOIS da primeira versão deste arquivo. O
+-- "create table if not exists" acima não mexe numa tabela que já existe,
+-- então quem aplicou a versão anterior só ganha a coluna por aqui.
+-- Sem elas, o backup do app novo é recusado pela nuvem (coluna
+-- desconhecida) — rode o arquivo inteiro de novo depois de atualizar.
+
+-- v11 do app: horário de funcionamento (janelas da diária).
+alter table public.estabelecimento add column if not exists hora_abertura   text;
+alter table public.estabelecimento add column if not exists hora_fechamento text;
 
 create table if not exists public.inspecao (
   uuid                  text primary key,

@@ -298,6 +298,53 @@ test('restaurar num aparelho vazio refaz o histórico, com os mesmos uuids', () 
   );
 });
 
+/**
+ * v11: o horário de funcionamento sobe e volta. Sem isso, o celular novo
+ * restaurado perderia a régua das janelas em silêncio — e a diária
+ * passaria a aceitar tudo a qualquer hora.
+ */
+test('os horários de funcionamento vão e voltam no backup', () => {
+  const origem = cenario();
+  origem.runSync(
+    "UPDATE estabelecimento SET hora_abertura = '07:00', hora_fechamento = '22:00'",
+  );
+  const { linhas } = montarPacote(origem, null);
+  assert.equal(linhas.estabelecimento[0].hora_abertura, '07:00');
+
+  const destino = cenario();
+  destino.runSync('DELETE FROM estabelecimento');
+  restaurar(destino, USUARIO, {
+    estabelecimento: linhas.estabelecimento[0],
+    inspecao: [],
+    resposta: [],
+    item_oculto: [],
+    acao: [],
+  });
+
+  const e = destino.getFirstSync('SELECT hora_abertura, hora_fechamento FROM estabelecimento');
+  assert.deepEqual({ ...e }, { hora_abertura: '07:00', hora_fechamento: '22:00' });
+});
+
+test('um backup anterior à v11, sem os horários, restaura sem horário', () => {
+  const origem = cenario();
+  const { linhas } = montarPacote(origem, null);
+  const { hora_abertura, hora_fechamento, ...antigo } = linhas.estabelecimento[0];
+
+  const destino = cenario();
+  destino.runSync('DELETE FROM estabelecimento');
+  restaurar(destino, USUARIO, {
+    estabelecimento: antigo,
+    inspecao: [],
+    resposta: [],
+    item_oculto: [],
+    acao: [],
+  });
+
+  const e = destino.getFirstSync('SELECT hora_abertura, hora_fechamento FROM estabelecimento');
+  assert.equal(e.hora_abertura, null);
+  assert.equal(e.hora_fechamento, null);
+});
+
 test('depois de restaurar, o próximo backup não devolve tudo à nuvem', () => {
   const origem = cenario();
   novaInspecao(origem);

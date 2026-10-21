@@ -41,6 +41,12 @@ import {
   INTERVALO_SEMESTRAL,
   obterEstabelecimentoAtualizado,
 } from '../db/periodicidade';
+import {
+  ANTECEDENCIA_FECHAMENTO,
+  normalizarHora,
+  problemaNosHorarios,
+  TOLERANCIA_ABERTURA,
+} from '../db/janela';
 import { useEstabelecimento } from '../store/estabelecimento';
 import { nuvemConfigurada } from '../db/supabase';
 import Cores from '../theme/cores';
@@ -88,14 +94,35 @@ export default function TelaCadastro() {
   const [funcionamento, setFuncionamento] = useState(() =>
     normalizarFuncionamento(estabelecimento?.dias_funcionamento ?? FUNCIONAMENTO_PADRAO),
   );
+  /**
+   * Horário de funcionamento (schema v11) — opcional, e a régua das
+   * janelas da diária (`db/janela.ts`).
+   *
+   * Fica como o texto digitado enquanto o usuário escreve; ao sair do
+   * campo, vira 'HH:MM'. O teclado numérico não tem ':', por isso
+   * '730' também é aceito.
+   */
+  const [abertura, setAbertura] = useState(estabelecimento?.hora_abertura ?? '');
+  const [fechamento, setFechamento] = useState(estabelecimento?.hora_fechamento ?? '');
   const [erro, setErro] = useState<string | null>(null);
 
   const abertos = totalDiasAbertos(funcionamento);
 
+  const aberturaNormal = normalizarHora(abertura);
+  const fechamentoNormal = normalizarHora(fechamento);
+  const horaIlegivel =
+    (abertura.trim() !== '' && aberturaNormal === null) ||
+    (fechamento.trim() !== '' && fechamentoNormal === null);
+  const problemaHorario = horaIlegivel
+    ? 'Use horas e minutos, como 07:30.'
+    : problemaNosHorarios(aberturaNormal, fechamentoNormal);
+
   // Zero dia aberto não é configuração válida: sem expediente não há
   // rotina diária, e toda conta de prazo perderia o chão. A trava fica
-  // no botão de salvar, e não num alerta depois do toque.
-  const podeSalvar = nome.trim().length > 0 && perfilId !== '' && abertos > 0;
+  // no botão de salvar, e não num alerta depois do toque. O horário
+  // torto também trava: salvo, ele travaria itens por uma régua errada.
+  const podeSalvar =
+    nome.trim().length > 0 && perfilId !== '' && abertos > 0 && problemaHorario === null;
 
   function aoSalvar() {
     try {
@@ -105,6 +132,8 @@ export default function TelaCadastro() {
         cidade,
         responsavel,
         diasFuncionamento: funcionamento,
+        horaAbertura: aberturaNormal,
+        horaFechamento: fechamentoNormal,
       });
 
       // O intervalo é gravado à parte porque `salvarEstabelecimento`
@@ -220,6 +249,45 @@ export default function TelaCadastro() {
             : 'Marque pelo menos um dia: sem expediente não há rotina diária a controlar.'}
         </Text>
 
+        {/* --- Horário de funcionamento (schema v11) --- */}
+        <Text style={estilos.rotuloCampo}>
+          Horário de funcionamento <Text style={estilos.opcional}>(opcional)</Text>
+        </Text>
+        <View style={estilos.horarios}>
+          <View style={estilos.flex}>
+            <Text style={estilos.rotuloHora}>Abre às</Text>
+            <TextInput
+              style={estilos.campo}
+              value={abertura}
+              onChangeText={setAbertura}
+              // Ao sair do campo, '730' vira '07:30' — o usuário vê o que
+              // o app entendeu antes de salvar.
+              onBlur={() => setAbertura((atual) => normalizarHora(atual) ?? atual)}
+              placeholder="07:00"
+              placeholderTextColor={Cores.textoSuave}
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
+          </View>
+          <View style={estilos.flex}>
+            <Text style={estilos.rotuloHora}>Fecha às</Text>
+            <TextInput
+              style={estilos.campo}
+              value={fechamento}
+              onChangeText={setFechamento}
+              onBlur={() => setFechamento((atual) => normalizarHora(atual) ?? atual)}
+              placeholder="22:00"
+              placeholderTextColor={Cores.textoSuave}
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
+          </View>
+        </View>
+        <Text style={problemaHorario ? estilos.erroCampo : estilos.ajuda}>
+          {problemaHorario ??
+            `Com o horário, cada etapa da inspeção diária só pode ser respondida na hora dela: "antes de abrir" até ${TOLERANCIA_ABERTURA} minutos depois da abertura, "durante o serviço" com o lugar aberto e "no fechamento" a partir de ${ANTECEDENCIA_FECHAMENTO} minutos antes de fechar. Sem horário, tudo fica liberado o dia todo.`}
+        </Text>
+
         {/* --- Campos opcionais --- */}
         <Text style={estilos.rotuloCampo}>
           Cidade <Text style={estilos.opcional}>(opcional)</Text>
@@ -285,7 +353,9 @@ export default function TelaCadastro() {
           <Text style={estilos.ajudaCentro}>
             {abertos === 0
               ? 'Marque ao menos um dia de funcionamento para continuar.'
-              : 'Preencha o nome e escolha um tipo para continuar.'}
+              : problemaHorario !== null
+                ? 'Corrija o horário de funcionamento para continuar.'
+                : 'Preencha o nome e escolha um tipo para continuar.'}
           </Text>
         ) : null}
       </ScrollView>
@@ -312,6 +382,11 @@ const estilos = StyleSheet.create({
   diaAberto: { backgroundColor: Cores.primariaClara, borderColor: Cores.primaria },
   diaTexto: { fontSize: 15, fontWeight: '700', color: Cores.textoSuave },
   diaTextoAberto: { color: Cores.sobrePrimariaClara },
+
+  horarios: { flexDirection: 'row', gap: 12 },
+  flex: { flex: 1 },
+  rotuloHora: { fontSize: 12, color: Cores.textoSecundario, marginBottom: 6 },
+  erroCampo: { fontSize: 12, lineHeight: 18, color: Cores.acentoTexto, marginTop: 8 },
 
   conteudo: { padding: 20, paddingBottom: 48 },
   etiqueta: {

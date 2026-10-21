@@ -110,3 +110,37 @@ test('a ação concluída não fala de prazo', () => {
     'Concluída',
   );
 });
+
+// ---------------------------------------------------------------
+// JANELAS DA DIÁRIA (schema v11)
+// ---------------------------------------------------------------
+
+/**
+ * Quem vê um item travado precisa saber se PERDEU a janela ou se ela
+ * ainda vai abrir — e a que horas. "Encerrada" sozinho não diz isso.
+ */
+test('textoJanela diz a hora em que a etapa libera, fecha ou fechou', () => {
+  const { textoJanela } = rotulos;
+  const abertura = { inicio: 0, fim: 450 }; // até 07:30
+  const servico = { inicio: 420, fim: 1320 }; // 07:00 às 22:00
+  const fechamento = { inicio: 1290, fim: 1440 }; // 21:30 ao fim do dia
+
+  assert.equal(textoJanela('aberta', abertura), 'Aberta até 07:30');
+  assert.equal(textoJanela('encerrada', abertura), 'Encerrada às 07:30');
+  assert.equal(textoJanela('ainda_nao', servico), 'Libera às 07:00');
+  assert.equal(textoJanela('ainda_nao', fechamento), 'Libera às 21:30');
+  assert.equal(
+    textoJanela('aberta', fechamento),
+    'Aberta até o fim do dia',
+    'não "até 24:00", que não é uma hora',
+  );
+});
+
+test('textoHorarioFuncionamento avisa quando não há janela', () => {
+  const { textoHorarioFuncionamento } = rotulos;
+  assert.equal(
+    textoHorarioFuncionamento({ abertura: 420, fechamento: 1320 }),
+    'Abre às 07:00 e fecha às 22:00.',
+  );
+  assert.match(textoHorarioFuncionamento(null), /liberada o dia todo/);
+});
