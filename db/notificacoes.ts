@@ -468,6 +468,22 @@ export function encerrarAndamento(trilha: Trilha): Promise<void> {
 }
 
 /**
+ * Cancela tudo: os alertas agendados e as notificações na barra.
+ *
+ * Para quando o banco inteiro é apagado (ferramenta de teste): sem
+ * estabelecimento, nenhum alerta tem a que se referir, e a notificação
+ * fixa de andamento levaria a uma inspeção que não existe mais.
+ */
+export function cancelarTodasAsNotificacoes(): Promise<void> {
+  return enfileirar(async () => {
+    const Notifications = carregar();
+    if (!Notifications) return;
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await Notifications.dismissAllNotificationsAsync();
+  });
+}
+
+/**
  * Remove as notificações de andamento que perderam o sentido.
  *
  * Ela é fixa, então não pode ficar para trás. Três casos:

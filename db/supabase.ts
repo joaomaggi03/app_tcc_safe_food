@@ -30,11 +30,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const URL_SUPABASE = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const CHAVE_ANONIMA = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+/**
+ * Onde a sessão fica no `localStorage`. É o MESMO nome que o Supabase
+ * usaria por padrão (`sb-<projeto>-auth-token`) — escrito aqui só para o
+ * `sair` poder apagá-la à mão quando o servidor não responde (ver
+ * store/conta.ts). Trocar o nome deslogaria quem já está logado.
+ */
+export const CHAVE_SESSAO = URL_SUPABASE
+  ? `sb-${new URL(URL_SUPABASE).hostname.split('.')[0]}-auth-token`
+  : null;
+
 export const supabase: SupabaseClient | null =
   URL_SUPABASE && CHAVE_ANONIMA
     ? createClient(URL_SUPABASE, CHAVE_ANONIMA, {
         auth: {
           storage: localStorage,
+          storageKey: CHAVE_SESSAO ?? undefined,
           autoRefreshToken: true,
           persistSession: true,
           // No celular não existe URL de retorno de login para ler.

@@ -378,10 +378,13 @@ function Resumo({ email }: { email: string }) {
       {deOutraConta ? (
         <View style={[estilos.cartao, estilos.espaco]}>
           <Text style={estilos.titulo}>Backup parado</Text>
+          {/* Mesmo e-mail, id diferente: a conta foi apagada e criada de
+              novo (ou o projeto da nuvem foi trocado). Para a nuvem é
+              OUTRA conta, e "entre nela" não teria como ser obedecido. */}
           <Text style={estilos.texto}>
-            O histórico deste celular já está guardado{' '}
-            {dono?.email ? `na conta ${dono.email}` : 'em outra conta'}. Um aparelho faz
-            backup para uma conta só: entre nela para continuar.
+            {dono?.email === email
+              ? `O histórico deste celular foi guardado por uma conta anterior com este mesmo e-mail, que foi apagada ou recriada. Para a nuvem ela é outra conta, e o backup deste celular fica parado. Para recomeçar, saia da conta e apague os dados do aparelho.`
+              : `O histórico deste celular já está guardado ${dono?.email ? `na conta ${dono.email}` : 'em outra conta'}. Um aparelho faz backup para uma conta só: entre nela para continuar.`}
           </Text>
         </View>
       ) : null}

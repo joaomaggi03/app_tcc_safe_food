@@ -35,8 +35,10 @@ import {
   type ItemOculto,
   type ResumoPerfil,
 } from '../db/consultas';
+import { resetarBanco } from '../db/index';
 import {
   alertasDisponiveis,
+  cancelarTodasAsNotificacoes,
   encerrarAndamento,
   reagendarAlertas,
   testarAlerta,
@@ -328,7 +330,58 @@ function Periodicidade({
       {__DEV__ ? <BotaoGerarHistorico estabelecimento={estabelecimento} /> : null}
       {__DEV__ ? <BotaoCompletarSemana estabelecimento={estabelecimento} /> : null}
       {__DEV__ ? <BotaoApagarTeste estabelecimento={estabelecimento} /> : null}
+      {__DEV__ ? <BotaoApagarTudo /> : null}
     </View>
+  );
+}
+
+/**
+ * FERRAMENTA DE TESTE: apaga O BANCO INTEIRO do aparelho e volta ao
+ * primeiro acesso.
+ *
+ * Usa o `resetarBanco` de db/index.ts, que fecha a conexão, apaga o
+ * arquivo e abre um novo — migrado do zero e com a norma recarregada. É
+ * também a saída para o banco que ficou para trás numa migração (ver a
+ * v6 no CLAUDE.md).
+ *
+ * Sai da conta neste aparelho (sem internet, `scope: 'local'`) e NÃO
+ * mexe na nuvem: o backup que estiver lá continua lá. Por isso também não
+ * chama `fazerBackup` — não há exclusão a levar, o aparelho apenas
+ * esquece tudo.
+ */
+function BotaoApagarTudo() {
+  const router = useRouter();
+  const sair = useConta((estado) => estado.sair);
+  const carregar = useEstabelecimento((estado) => estado.carregar);
+
+  async function apagar() {
+    await cancelarTodasAsNotificacoes();
+    await sair();
+    resetarBanco();
+    // O store ainda guarda o estabelecimento apagado; relido, fica null,
+    // e a aba Hoje manda para o cadastro.
+    carregar();
+    router.replace('/');
+  }
+
+  return (
+    <Pressable
+      style={({ pressed }) => [estilos.testar, pressed && estilos.pressionado]}
+      onPress={() =>
+        Alert.alert(
+          'Apagar TODOS os dados?',
+          'Apaga deste aparelho o cadastro, todas as inspeções (de verdade e de teste), as respostas, os itens ocultos e o plano de ação, e sai da conta. O app volta ao primeiro acesso. Não tem volta. O backup na nuvem, se houver, não é tocado.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Apagar tudo', style: 'destructive', onPress: () => void apagar() },
+          ],
+        )
+      }
+      accessibilityRole="button"
+    >
+      <Ionicons name="nuclear-outline" size={15} color={Cores.acentoTexto} />
+      <Text style={[estilos.testarTexto, estilos.testarPerigo]}>Apagar todos os dados (teste)</Text>
+    </Pressable>
   );
 }
 
@@ -734,6 +787,7 @@ const estilos = StyleSheet.create({
     borderColor: Cores.borda,
   },
   testarTexto: { fontSize: 13, fontWeight: '600', color: Cores.primariaTexto },
+  testarPerigo: { color: Cores.acentoTexto },
   semAlertas: {
     flexDirection: 'row',
     alignItems: 'flex-start',

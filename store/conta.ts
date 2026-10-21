@@ -13,7 +13,7 @@
  */
 
 import { create } from 'zustand';
-import { supabase } from '../db/supabase';
+import { CHAVE_SESSAO, supabase } from '../db/supabase';
 
 interface EstadoConta {
   /** O e-mail da conta logada, ou null. */
@@ -110,7 +110,26 @@ export const useConta = create<EstadoConta>((set) => ({
 
   sair: async () => {
     if (!supabase) return;
-    // 'local': sai só deste aparelho, sem precisar de internet.
-    await supabase.auth.signOut({ scope: 'local' });
+    // 'local': sai só deste aparelho.
+    let falhou = false;
+    try {
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      falhou = error !== null;
+    } catch {
+      falhou = true;
+    }
+
+    // SEM O SERVIDOR, O SUPABASE NÃO SAI. Com a sessão vencida, ele tenta
+    // renová-la antes de sair; a renovação falha na rede e o `signOut`
+    // devolve o erro SEM apagar a sessão do aparelho. Aconteceu com o
+    // projeto pausado: o botão "Sair da conta" não fazia nada. Sair
+    // deste aparelho não depende da nuvem — então a sessão é apagada à
+    // mão, e o store avisado, já que nenhum evento do Supabase virá.
+    if (falhou && CHAVE_SESSAO) {
+      for (const sufixo of ['', '-code-verifier', '-user']) {
+        localStorage.removeItem(CHAVE_SESSAO + sufixo);
+      }
+      set({ email: null, usuarioId: null });
+    }
   },
 }));

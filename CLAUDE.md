@@ -262,6 +262,11 @@ exportação em PDF (RF08).
     teria. Aceitável num andaime.
   - `apagarDadosDeTeste` — "Apagar dados de teste": remove todas as
     fabricadas, e só elas.
+  - "Apagar todos os dados" — chama o `resetarBanco` de `db/index.ts`
+    (apaga o arquivo do SQLite e recria migrado e semeado), cancela as
+    notificações e sai da conta só neste aparelho. O app volta ao
+    primeiro acesso. **Não toca na nuvem** e não chama o backup. Serve
+    também para o aparelho que ficou para trás numa migração.
   - **As fabricadas são gravadas com `inspecao.modo = 'teste'`** (rótulo
     "Teste" no histórico). Sem a marca, eram indistinguíveis das reais e
     não havia como tirá-las (achado do `fiscal`). A marca mora na
@@ -419,6 +424,14 @@ exportação em PDF (RF08).
     em vez de falhar calado. Achado do `fiscal`: a primeira versão dizia
     que "outra conta recebe tudo", e um teste que só olhava o pacote
     confirmava a mentira.
+  - **Sair da conta não depende da nuvem** (achado em 20/10/2026, com o
+    projeto Supabase pausado). Com a sessão vencida, o `signOut` tenta
+    renová-la, falha na rede e devolve erro SEM apagar a sessão — o botão
+    "Sair" não fazia nada. Agora o `sair` de `store/conta.ts` apaga a
+    sessão do `localStorage` à mão quando o `signOut` falha
+    (`CHAVE_SESSAO`, em `db/supabase.ts`, igual à chave padrão do
+    Supabase). E o aviso de "Backup parado" diz quando o dono é uma conta
+    ANTERIOR com o mesmo e-mail (conta recriada: o id muda, o e-mail não).
   - **Exclusões sobem ANTES das linhas**: item ocultado, reexibido e
     ocultado de novo tem exclusão anotada e linha viva ao mesmo tempo.
   - **Restauração só em aparelho vazio** (celular novo). Juntar dados dos
