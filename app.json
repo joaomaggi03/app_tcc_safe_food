@@ -32,7 +32,8 @@
           "color": "#006DB2"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sharing"
     ],
     "scheme": "apptcc",
     "extra": {

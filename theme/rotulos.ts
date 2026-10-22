@@ -349,6 +349,14 @@ export function formatarData(iso: string): string {
 // PLANO DE AÇÃO (RF07)
 // ---------------------------------------------------------------
 
+/** A situação da ação numa palavra — para o relatório (RF08). */
+export const ROTULO_SITUACAO_ACAO: Record<SituacaoAcao, string> = {
+  atrasada: 'Atrasada',
+  vence_hoje: 'Vence hoje',
+  no_prazo: 'No prazo',
+  concluida: 'Concluída',
+};
+
 /** O nome do atalho de prazo no formulário. */
 export function rotuloAtalhoPrazo(dias: number): string {
   if (dias === 0) return 'Hoje';

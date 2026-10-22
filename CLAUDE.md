@@ -725,9 +725,78 @@ exportação em PDF (RF08).
     a `VERSAO_SEED`** (senão os aparelhos não recebem o catálogo).
   - Pendente do autor: o "cor" do `prep_11` (a norma parece falar em
     aroma e sabor; ver o rascunho).
-- **Próxima: o RF08** —
-  exportação em PDF. Depois, revisar o texto do TCC contra o que foi
-  construído (ver seção 7 do plano).
+- **RF08 — relatório da inspeção em PDF (feito; testado no build novo
+  em 21/10/2026).** Botão "Exportar relatório em PDF" na tela de resultado,
+  para as três trilhas. O PDF é gerado NO APARELHO, sem internet, e sai
+  pela janela de compartilhar do sistema (WhatsApp, e-mail, Drive,
+  Arquivos).
+  - **Dependências NATIVAS novas: `expo-print` e `expo-sharing`**
+    (instaladas com `npx expo install`, versões casadas com o SDK 57).
+    **Exigem build novo no EAS** (`eas build --profile development
+    --platform android`). Num build anterior elas não existem: por isso
+    são carregadas com `require` dentro de `try` em `db/exportarPdf.ts`
+    (mesma armadilha do `expo-notifications`), e o botão responde "PDF
+    indisponível nesta versão" em vez de derrubar o app. Um teste de
+    convenção proíbe o import de topo das duas.
+  - Três camadas, a regra fora da tela:
+    - `db/relatorio.ts` — junta os dados (só lê): reaproveita score,
+      score por categoria e `pendenciasDaDiaria`, e tem as duas consultas
+      novas, testadas sobre o SQL real em `tests/relatorio.test.js`:
+      `SELECT_ITENS_RELATORIO` (previstos + respondidos, com a hora de
+      cada resposta; o `json_each` abre a lista `itens_previstos` no
+      próprio SQL; inspeção pré-v12 mostra só os respondidos) e
+      `SELECT_ACOES_RELATORIO` (para cada item inadequado, a ação desta
+      inspeção ou, sem ela, a aberta do item).
+    - `db/relatorioHtml.ts` — **puro**: monta a página. Texto do usuário
+      sempre por `escapar`; score nulo "—"; diária pré-v12 com
+      "pendências não disponíveis", nunca 0; faixa da RDC 275 só na
+      periódica, com a ressalva de critério adaptado; cores do
+      `theme/cores.ts`.
+    - `db/exportarPdf.ts` — `printToFileAsync` + `shareAsync`; não lança
+      erro, devolve `'ok' | 'indisponivel' | 'erro'` e a tela explica.
+  - **O que vai no PDF:** cabeçalho (estabelecimento, tipo, cidade,
+    responsável, trilha/modo, dia, início, conclusão, horário congelado
+    daquele dia), resultado (score, críticos, cobertura; atendimento e
+    grupo da 275 na periódica), score por categoria, pendências por
+    etapa (diária), plano de ação dos inadequados (o texto GRAVADO na
+    ação, inclusive o plano pronto), a lista item a item INTEIRA (com
+    "sem resposta" e "corrigido na hora") e o rodapé com o método do
+    score, a data de geração e a versão do app.
+  - A lista item a item vai inteira porque a proposta diz "compilar
+    TODAS as informações da inspeção". Na diária, cada item mostra a
+    ETAPA (é o que liga os "sem resposta" às pendências por etapa); e a
+    hora leva a data junto quando a resposta caiu em outro dia.
+  - **Achados do `fiscal` corrigidos antes do commit:**
+    - (bloqueou) diária pré-v12 saía com "sem horário", afirmando o que
+      não se sabe. Agora são três textos: "não registrado nesta diária"
+      (sem lista congelada), "sem horário de funcionamento cadastrado" e
+      o horário. Mesmo critério das pendências "não disponíveis".
+    - O PDF listava só os inadequados COM ação; agora a seção "Itens
+      inadequados e plano de ação" traz os três casos da tela: com ação,
+      "corrigido na hora" e "sem ação registrada". Diferença deliberada
+      com a tela: o PDF prefere a ação nascida DESTA inspeção; a tela
+      mostra a aberta do item.
+    - **A situação das ações é FOTO do dia em que o PDF é gerado** (uma
+      ação segue viva depois da inspeção), e a seção diz isso. O resto do
+      relatório é registro congelado. O mesmo PDF gerado em dias
+      diferentes pode mudar SÓ nessa seção e na contagem de ocultos.
+    - Os itens ocultos (RF09) aparecem como contagem, com a data.
+    - A ressalva da faixa da 275 diz que tirar "não se aplica" e "não
+      observado" da conta é critério do app.
+    - "Compartilhamento indisponível" é aviso separado de "build antigo".
+  - O `npx expo install` acrescentou o plugin `expo-sharing` ao
+    `app.json`. Sem opções ele fica com o "receber compartilhamento"
+    desligado e não mexe no manifesto — inofensivo.
+  - **Para a banca:** o P-FUND-3 fala em relatórios "consolidados"; o que
+    existe é o relatório COMPLETO DE CADA INSPEÇÃO. Ajustar o texto do TCC
+    ou declarar o consolidado do mês como trabalho futuro.
+  - **Supabase Storage continua sem uso** (P-TEC-2): o PDF é gerado e
+    compartilhado no aparelho, offline. Guardar na nuvem dependeria de
+    conta e de internet — fica como trabalho futuro no texto do TCC.
+  - Limitação: o arquivo sai com o nome que o `expo-print` sorteia;
+    renomear exigiria o `expo-file-system`.
+- **Próxima: revisar o texto do TCC
+  contra o que foi construído** (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
   Histórico. Dois defeitos: o cartão de prazos do Início listava as três
   trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de

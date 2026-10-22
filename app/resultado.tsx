@@ -18,7 +18,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   obterResumoInspecao,
   pendenciasDaDiaria,
@@ -32,6 +32,7 @@ import {
 } from '../db/consultas';
 import MedidorScore from '../components/MedidorScore';
 import PendenciasPorEtapa from '../components/PendenciasPorEtapa';
+import { exportarRelatorio } from '../db/exportarPdf';
 import { faixaRdc275, type GrupoRdc275 } from '../db/faixa';
 import Cores from '../theme/cores';
 import {
@@ -95,11 +96,34 @@ export default function TelaResultado() {
     }, [inspecaoId]),
   );
 
+  // Enquanto o PDF é gerado, o botão trava: dois toques fariam dois PDFs.
+  const [gerando, setGerando] = useState(false);
+
   if (!dados) {
     return <Redirect href="/conformidade" />;
   }
 
   const { inspecao, categorias, pendenciasDoDia } = dados;
+
+  async function aoExportar() {
+    setGerando(true);
+    const resultado = await exportarRelatorio(inspecao.id);
+    setGerando(false);
+
+    if (resultado === 'indisponivel') {
+      Alert.alert(
+        'PDF indisponível nesta versão',
+        'Gerar o PDF precisa da versão nova do app (build com o expo-print e o expo-sharing). Instale o build mais recente e tente de novo.',
+      );
+    } else if (resultado === 'sem_compartilhamento') {
+      Alert.alert(
+        'Compartilhamento indisponível',
+        'O PDF foi gerado, mas este aparelho não oferece a opção de compartilhar arquivos.',
+      );
+    } else if (resultado === 'erro') {
+      Alert.alert('Não foi possível gerar o PDF', 'Tente de novo em instantes.');
+    }
+  }
 
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
@@ -133,6 +157,24 @@ export default function TelaResultado() {
       </Text>
 
       <View style={estilos.botoes}>
+        {/* RF08: o relatório completo em PDF, gerado no aparelho. */}
+        <Pressable
+          style={({ pressed }) => [
+            estilos.botaoPdf,
+            gerando && estilos.botaoDesativado,
+            pressed && estilos.pressionado,
+          ]}
+          onPress={aoExportar}
+          disabled={gerando}
+          accessibilityRole="button"
+          accessibilityState={{ busy: gerando }}
+        >
+          <Ionicons name="document-text-outline" size={18} color={Cores.primariaTexto} />
+          <Text style={estilos.botaoPdfTexto}>
+            {gerando ? 'Gerando o PDF…' : 'Exportar relatório em PDF'}
+          </Text>
+        </Pressable>
+
         <Pressable
           style={({ pressed }) => [estilos.botao, pressed && estilos.botaoPressionado]}
           onPress={() => router.replace('/')}
@@ -588,7 +630,20 @@ const estilos = StyleSheet.create({
   },
   botaoPressionado: { backgroundColor: Cores.primariaEscura },
   botaoTexto: { fontSize: 15, fontWeight: '700', color: Cores.sobrePrimaria },
+  botaoPdf: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Cores.primaria,
+    backgroundColor: Cores.superficie,
+    paddingVertical: 14,
+  },
+  botaoPdfTexto: { fontSize: 15, fontWeight: '700', color: Cores.primariaTexto },
   botaoSecundario: { alignItems: 'center', paddingVertical: 12 },
   botaoSecundarioTexto: { fontSize: 14, fontWeight: '600', color: Cores.primariaTexto },
   pressionado: { opacity: 0.6 },
+  botaoDesativado: { opacity: 0.5 },
 });

@@ -11,7 +11,9 @@
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.10",
     "expo-notifications": "~57.0.20",
+    "expo-print": "~57.0.2",
     "expo-router": "~57.0.22",
+    "expo-sharing": "~57.0.24",
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
@@ -35,7 +37,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "icones": "node assets/fonte/gerar-icones.mjs",
-    "pretest": "tsc data/planos-acao.ts data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/alertaEtapa.ts db/backup.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/janela.ts db/pendencia.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
+    "pretest": "tsc data/planos-acao.ts data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/alertaEtapa.ts db/backup.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/janela.ts db/pendencia.ts db/relatorioHtml.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/cores.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "private": true

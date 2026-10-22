@@ -82,6 +82,17 @@ test('expo-notifications nunca é importado no topo de um arquivo', () => {
 });
 
 /**
+ * RF08: `expo-print` e `expo-sharing` são nativos e só existem a partir do
+ * build que os instalou. Import de topo derrubaria o app num build
+ * anterior — mesma armadilha do `expo-notifications`. Só `import type` e o
+ * `require` dentro do try de db/exportarPdf.ts.
+ */
+test('expo-print e expo-sharing nunca são importados no topo de um arquivo', () => {
+  const achados = procurar(/^\s*import\s+(?!type\b)[^;]*from\s+['"]expo-(print|sharing)['"]/);
+  assert.deepEqual(achados, [], `use o require dentro do try em db/exportarPdf.ts:\n${achados.join('\n')}`);
+});
+
+/**
  * Regra do CLAUDE.md: as telas chamam funções de db/, nunca escrevem
  * SQL. É o que mantém a regra de negócio fora da navegação — que o autor
  * ainda pretende redesenhar.

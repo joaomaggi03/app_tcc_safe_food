@@ -17,6 +17,7 @@
  *   db/funcionamento.ts    os dias em que o estabelecimento abre
  *   db/janela.ts           a janela de horário de cada etapa da diária
  *   db/pendencia.ts        as pendências da diária
+ *   db/relatorioHtml.ts    o relatório da inspeção em HTML (RF08)
  *   db/sequencia.ts        a sequência de dias da diária
  *   db/vencimento.ts       a regra de vencimento
  *   db/schema.ts           as migrações
@@ -87,6 +88,7 @@ module.exports = {
   funcionamento: () => exigir('db/funcionamento.js'),
   janela: () => exigir('db/janela.js'),
   pendencia: () => exigir('db/pendencia.js'),
+  relatorioHtml: () => exigir('db/relatorioHtml.js'),
   sequencia: () => exigir('db/sequencia.js'),
   vencimento: () => exigir('db/vencimento.js'),
   schema: () => exigir('db/schema.js'),
