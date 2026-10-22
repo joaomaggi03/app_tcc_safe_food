@@ -11,10 +11,12 @@
  * projetos.
  *
  * A AÇÃO GERADA DIZ O QUE ATINGIR, NÃO COMO. O app cria a ação ao
- * concluir a inspeção com o texto da exigência (`descricaoGerada`); aqui
+ * concluir a inspeção com o texto da exigência (`descricaoDaAcao`); aqui
  * o usuário acrescenta como vai resolver. O app não sugere "troque a
  * borracha da geladeira": seria inventar conteúdo que a norma não tem —
- * ela diz o que é exigido, não como consertar cada caso.
+ * ela diz o que é exigido, não como consertar cada caso. A EXCEÇÃO é o
+ * item com plano pronto (`data/planos-acao.ts`): aí o texto nasce com os
+ * passos, revisados e com a origem de cada um.
  *
  * Parâmetros:
  *  - `item`: obrigatório, o id do item da norma;
@@ -36,12 +38,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ATALHOS_PRAZO, descricaoGerada, prazoDoAtalho, prazoPadraoEmDias } from '../db/acao';
+import { ATALHOS_PRAZO, descricaoDaAcao, prazoDoAtalho, prazoPadraoEmDias } from '../db/acao';
 import {
   diaLocalISO,
   excluirAcao,
   obterAcaoAberta,
   obterItemDaAcao,
+  passosDoPlano,
   salvarAcao,
   type AcaoCorretiva,
   type Estabelecimento,
@@ -106,8 +109,11 @@ function Formulario({
   const hoje = diaLocalISO();
   // Sem ação aberta (inspeção antiga, ou a gerada foi excluída), o campo
   // nasce com o mesmo texto que o app geraria ao concluir a inspeção.
+  // Com plano pronto (entrega 4), os passos que valem para o perfil.
   const [descricao, setDescricao] = useState(
-    () => existente?.descricao ?? (item ? descricaoGerada(item) : ''),
+    () =>
+      existente?.descricao ??
+      (item ? descricaoDaAcao(item, passosDoPlano(itemId, estabelecimento.id)) : ''),
   );
   const [prazo, setPrazo] = useState(
     () =>

@@ -10,8 +10,9 @@
 import type { MomentoDia } from '../data/rdc216';
 import { ROTINA_DIARIA } from '../data/rotina-diaria';
 import {
-  descricaoGerada,
+  descricaoDaAcao,
   ordenarAcoes,
+  type PassoDoPlano,
   prazoDoAtalho,
   prazoPadraoEmDias,
   precisaDeAcao,
@@ -1854,8 +1855,10 @@ export function pendenciasDaInspecao(inspecaoId: number): Pendencia[] {
  * não tem ação aberta — exceto o que foi CORRIGIDO NA HORA na diária.
  * Chamada por `concluirInspecao`.
  *
- * - O texto diz a exigência a atingir (`descricaoGerada`), não como
- *   consertar — isso o usuário acrescenta.
+ * - O texto diz a exigência a atingir, não como consertar — isso o
+ *   usuário acrescenta. A exceção é o item com PLANO PRONTO (entrega 4):
+ *   aí vêm os passos revisados, cada um com a sua origem
+ *   (`descricaoDaAcao`).
  * - O prazo é o sugerido (crítico hoje, demais 7 dias), contado do dia de
  *   hoje e empurrado para o próximo dia aberto do estabelecimento.
  * - `INSERT OR IGNORE` + o índice único do schema v8: se o item já tem
@@ -1904,7 +1907,8 @@ export function gerarAcoesDaInspecao(inspecaoId: number): number {
         origem.estabelecimento_id,
         pendencia.item_id,
         inspecaoId,
-        descricaoGerada(pendencia),
+        // Com plano pronto (entrega 4), os passos; sem, o texto genérico.
+        descricaoDaAcao(pendencia, passosDoPlano(pendencia.item_id, origem.estabelecimento_id)),
         prazo,
         agoraISO(),
       );
@@ -1913,6 +1917,32 @@ export function gerarAcoesDaInspecao(inspecaoId: number): number {
   });
 
   return criadas;
+}
+
+/**
+ * Os passos do PLANO PRONTO de um item que valem para ESTE estabelecimento
+ * (entrega 4; opção decidida em 21/10/2026).
+ *
+ * O filtro é o que o app já tinha, aplicado ao item RELACIONADO de cada
+ * passo: o JOIN com `item_aplicabilidade` é o RF03 (vale para o perfil?),
+ * e o NOT IN em `item_oculto` é o RF09 (o estabelecimento disse que não se
+ * aplica?). Feirante não recebe "instale telas" porque o item das telas
+ * não vale para feirante. Lista vazia = sem plano pronto.
+ */
+export const SELECT_PASSOS_DO_PLANO = `
+  SELECT p.texto, p.origem_tipo, p.origem_ref
+    FROM plano_passo p
+    JOIN estabelecimento e ON e.id = ?
+    JOIN item_aplicabilidade a
+      ON a.item_id = p.item_relacionado AND a.perfil_id = e.perfil_id
+   WHERE p.item_id = ?
+     AND p.item_relacionado NOT IN (
+       SELECT item_id FROM item_oculto WHERE estabelecimento_id = e.id
+     )
+   ORDER BY p.ordem`;
+
+export function passosDoPlano(itemId: string, estabelecimentoId: number): PassoDoPlano[] {
+  return obterBanco().getAllSync<PassoDoPlano>(SELECT_PASSOS_DO_PLANO, estabelecimentoId, itemId);
 }
 
 /** O item, para o formulário de ação mostrar do que se trata. */

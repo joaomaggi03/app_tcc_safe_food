@@ -54,6 +54,7 @@ test('instalação nova cria o schema inteiro', () => {
     'item_oculto',
     'acao',
     'meta',
+    'plano_passo',
   ]) {
     assert.ok(tabelas(db).includes(esperada), `faltou a tabela ${esperada}`);
   }

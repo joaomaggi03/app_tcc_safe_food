@@ -22,10 +22,11 @@
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { PLANOS_PRONTOS } from '../data/planos-acao';
 import { CATEGORIAS, ITENS, PERFIS } from '../data/rdc216';
 
 /** Suba este número sempre que editar o conteúdo de data/rdc216.ts. */
-export const VERSAO_SEED = 3;
+export const VERSAO_SEED = 5;
 
 const CHAVE_META = 'versao_seed';
 
@@ -120,6 +121,25 @@ export function semear(db: SQLiteDatabase): void {
         );
       });
     });
+
+    // OS PLANOS PRONTOS (schema v13): catálogo, reconstruído do zero como
+    // a aplicabilidade. Vem depois dos itens porque aponta para eles.
+    db.runSync('DELETE FROM plano_passo');
+    for (const plano of PLANOS_PRONTOS) {
+      plano.passos.forEach((passo, ordem) => {
+        db.runSync(
+          `INSERT INTO plano_passo
+             (item_id, ordem, texto, item_relacionado, origem_tipo, origem_ref)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          plano.itemId,
+          ordem,
+          passo.texto,
+          passo.itemRelacionado,
+          passo.origem.tipo,
+          passo.origem.tipo === 'norma' ? passo.origem.codigoRdc : passo.origem.fonte,
+        );
+      });
+    }
 
     db.runSync(
       'INSERT OR REPLACE INTO meta (chave, valor) VALUES (?, ?)',

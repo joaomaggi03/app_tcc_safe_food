@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 12;
+export const VERSAO_SCHEMA = 13;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -516,6 +516,31 @@ const SCHEMA_V12 = `
   ALTER TABLE inspecao ADD COLUMN itens_previstos TEXT;
 `;
 
+/**
+ * v13: OS PLANOS DE AÇÃO PRONTOS (entrega 4 dos pedidos do orientador;
+ * catálogo em `data/planos-acao.ts`).
+ *
+ * É tabela de CATÁLOGO, como `item`: o seed a reescreve, o usuário nunca
+ * edita. E é TABELA, e não JSON numa coluna do item, pela regra de
+ * sempre — vira tabela o que o SQL precisa cruzar: cada passo é filtrado
+ * pela `item_aplicabilidade` (perfil) e pelo `item_oculto` (RF09) do
+ * item relacionado a ele.
+ *
+ * `origem_tipo` diz se o passo é da norma ou complemento; `origem_ref` é o
+ * código da RDC ou a fonte do complemento.
+ */
+const SCHEMA_V13 = `
+  CREATE TABLE IF NOT EXISTS plano_passo (
+    item_id           TEXT    NOT NULL REFERENCES item(id) ON DELETE CASCADE,
+    ordem             INTEGER NOT NULL,
+    texto             TEXT    NOT NULL,
+    item_relacionado  TEXT    NOT NULL REFERENCES item(id) ON DELETE CASCADE,
+    origem_tipo       TEXT    NOT NULL CHECK (origem_tipo IN ('norma', 'complemento')),
+    origem_ref        TEXT    NOT NULL CHECK (length(trim(origem_ref)) > 0),
+    PRIMARY KEY (item_id, ordem)
+  );
+`;
+
 /** Essa tabela já tem essa coluna? */
 function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
   return db
@@ -584,6 +609,10 @@ export function migrar(db: SQLiteDatabase): void {
 
   if (versaoAtual < 12) {
     db.execSync(SCHEMA_V12);
+  }
+
+  if (versaoAtual < 13) {
+    db.execSync(SCHEMA_V13);
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

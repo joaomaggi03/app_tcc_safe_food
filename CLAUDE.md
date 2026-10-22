@@ -472,8 +472,8 @@ exportação em PDF (RF08).
   4. plano de ação PRONTO para um item só, como exemplo (o orientador
      sugeriu um catálogo por item e reconheceu que para os 89 seria
      demais). Catálogo local em `data/`, levado ao SQLite pelo seed.
-     Sugestão: `prep_11` (óleo), em que a própria RDC diz a correção. O
-     texto dos passos vem do autor, com fonte (regra 4).
+     O texto dos passos vem do autor, com fonte (regra 4). (**feita**,
+     com o `prag_01` no lugar do `prep_11` — ver "Plano de ação pronto".)
 - **Janelas de horário da diária (schema v11, feito — entrega 1 acima).**
   - O cadastro ganhou **horário de abertura e de fechamento**, opcionais,
     em `estabelecimento.hora_abertura` / `hora_fechamento` ('HH:MM'
@@ -666,7 +666,66 @@ exportação em PDF (RF08).
     minutos, o que pesa numa janela de 30.
   - **Para testar sem esperar:** cadastrar a abertura ~32 min à frente
     do relógio; o alerta de "antes de abrir" toca em ~2 min.
-- **Próxima: entrega 4 dos pedidos do orientador, depois o RF08** —
+- **Plano de ação pronto (entrega 4) — feito; texto aprovado em
+  21/10/2026.** O autor aprovou o rascunho como estava. No catálogo: 8
+  passos, cada um citando um artigo da norma (o passo 3 virou 3a/3b; o
+  complemento "anotar onde e quando" SAIU por não ter fonte). Dois passos
+  levam redação nossa sob a etiqueta da norma, e o texto diz isso: os
+  exemplos do passo 1 vêm depois de "por exemplo", e "o controle químico
+  é feito pela empresa, e não pelo próprio estabelecimento" é a leitura
+  direta do "executado por empresa especializada" do 4.3.2. Prazo:
+  padrão do app (7 dias). Restaurante recebe os 8; feirante e ambulante,
+  3 (4.3.1, 4.5.3, 4.11.6) — testado sobre o catálogo real.
+  `VERSAO_SEED` = 5.
+  - **O fiscal pegou uma citação errada (bloqueou o commit):** o
+    rascunho, escrito de memória, punha o POP de pragas e o comprovante
+    no 4.11.4 — que é só a LISTA dos quatro POPs. O certo é o **4.11.6**,
+    como o próprio checklist já dizia (`docu_06`). Corrigido no catálogo,
+    no teste e no rascunho, e o seed subiu de novo para os aparelhos que
+    já tinham rodado a versão errada. **Prova de que a conferência no
+    texto oficial (DOU de 16/09/2004) não é formalidade: todas as
+    citações do catálogo precisam ser conferidas antes da banca.**
+  - O comprovante cita o 4.11.6, mas o item RELACIONADO é o `prag_02`
+    (4.3.2): o passo só faz sentido onde há controle químico, que só vale
+    para fixos e food truck. Artigo citado ≠ item relacionado.
+  - Guarda nova em `tests/planos.test.js`: todo artigo citado num passo
+    tem que existir como código de algum item do `rdc216.ts`. Não pega
+    citação TROCADA (isso é conferência humana), mas pega a inexistente.
+  - A ação guarda o texto CONGELADO em `acao.descricao`: corrigir o
+    catálogo depois não alcança ações já geradas. O RF08 imprime a
+    `descricao` como está (é o que o usuário pode ter editado).
+  O item escolhido mudou: do `prep_11` (óleo) para o
+  **`prag_01` (controle de pragas, 4.3.1)**, decisão do autor em
+  21/10/2026 — o óleo é da diária e se resolve com "Corrigi na hora", que
+  não gera ação, então o plano pronto quase nunca apareceria. O `prag_01`
+  é da auditoria periódica, vale para os 6 perfis e a correção está quase
+  toda escrita na norma (4.3, 4.1.4, 4.5, 4.11.6). Rascunho, com o
+  registro da aprovação, em `docs/rascunhos/plano-acao-prag_01.md`.
+  - `data/planos-acao.ts` — o catálogo (dado, não código): por item, os
+    passos; cada passo com `itemRelacionado` e a `origem` — artigo da RDC
+    ou complemento COM FONTE. Complemento sem fonte não entra (regra 4),
+    e `tests/planos.test.js` barra isso, item inexistente e plano
+    duplicado antes de o conteúdo chegar.
+  - **Schema v13: tabela de catálogo `plano_passo`**, reescrita pelo seed
+    (como `item_aplicabilidade`). Tabela, e não JSON, porque o SQL cruza:
+    cada passo só vale se o item RELACIONADO a ele vale para o perfil
+    (`item_aplicabilidade`, RF03) e não foi ocultado (`item_oculto`,
+    RF09). É a opção (b) decidida com o autor para feirante e ambulante:
+    eles não recebem "instale telas" porque o item das telas não vale
+    para eles. `SELECT_PASSOS_DO_PLANO` / `passosDoPlano` em
+    `db/consultas.ts`, testado com passos de mentira.
+  - `descricaoDaAcao` (`db/acao.ts`, puro) — com passos, "Plano para o
+    item X da RDC 216:" e a lista numerada, cada passo com "(RDC 4.3.2)"
+    ou "(boa prática — fonte: …)" no próprio texto, porque a ação tem um
+    campo só e quem editar continua vendo o que é norma. Sem passos, o
+    texto genérico de sempre. Usada ao concluir a inspeção e no "Criar
+    ação" manual. É a EXCEÇÃO à regra "o texto diz o que atingir, não como
+    consertar": aqui o como foi revisado e tem origem.
+  - **Ao acrescentar outro plano:** preencher `PLANOS_PRONTOS` e **subir
+    a `VERSAO_SEED`** (senão os aparelhos não recebem o catálogo).
+  - Pendente do autor: o "cor" do `prep_11` (a norma parece falar em
+    aroma e sabor; ver o rascunho).
+- **Próxima: o RF08** —
   exportação em PDF. Depois, revisar o texto do TCC contra o que foi
   construído (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e

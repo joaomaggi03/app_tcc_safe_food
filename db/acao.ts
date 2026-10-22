@@ -103,6 +103,42 @@ export function descricaoGerada(item: { codigo_rdc: string; topicos: string[] })
     : `Adequar ao item ${item.codigo_rdc} da RDC 216.`;
 }
 
+/** Um passo do plano pronto, como sai do banco (tabela `plano_passo`). */
+export interface PassoDoPlano {
+  texto: string;
+  origem_tipo: 'norma' | 'complemento';
+  origem_ref: string;
+}
+
+/**
+ * O texto da ação quando o item tem PLANO PRONTO (entrega 4 dos pedidos
+ * do orientador; catálogo em `data/planos-acao.ts`).
+ *
+ * Aqui o "como" pode aparecer, ao contrário do `descricaoGerada`, porque
+ * não é o app inventando: cada passo foi revisado pelo autor e diz de
+ * onde veio — o artigo da RDC, ou a fonte do complemento. A origem vai
+ * no próprio texto porque a ação tem um campo só, e o usuário que editar
+ * continua vendo o que é norma e o que não é.
+ *
+ * Sem passos (item sem plano, ou nenhum passo vale para o perfil), cai
+ * no texto genérico.
+ */
+export function descricaoDaAcao(
+  item: { codigo_rdc: string; topicos: string[] },
+  passos: PassoDoPlano[],
+): string {
+  if (passos.length === 0) return descricaoGerada(item);
+
+  const linhas = passos.map((passo, indice) => {
+    const origem =
+      passo.origem_tipo === 'norma'
+        ? `RDC ${passo.origem_ref}`
+        : `boa prática — fonte: ${passo.origem_ref}`;
+    return `${indice + 1}. ${passo.texto} (${origem})`;
+  });
+  return [`Plano para o item ${item.codigo_rdc} da RDC 216:`, ...linhas].join('\n');
+}
+
 export interface CalculoAcao {
   situacao: SituacaoAcao;
   /** Negativo quando atrasada; null quando concluída (não há mais prazo a correr). */
