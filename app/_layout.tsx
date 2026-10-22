@@ -66,6 +66,15 @@ export default function LayoutRaiz() {
   useEffect(() => {
     if (!estabelecimento) return;
     void reagendarAlertas(estabelecimento);
+
+    // E ao VOLTAR ao app (entrega 3): os alertas de etapa cobrem só os
+    // próximos 7 dias, e quem nunca fecha o app de verdade só "abre" por
+    // aqui. Sem isso, a semana agendada acabava e os avisos paravam
+    // (achado do `fiscal`).
+    const assinatura = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') void reagendarAlertas(estabelecimento);
+    });
+    return () => assinatura.remove();
   }, [estabelecimento]);
 
   /**

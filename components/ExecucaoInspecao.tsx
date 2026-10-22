@@ -82,7 +82,7 @@ import {
   type VerificacaoChecklist,
 } from '../db/consultas';
 import { diaLocalISO } from '../db/datas';
-import { contarPendencias, etapaEncerrada } from '../db/pendencia';
+import { contarPendencias, etapaEncerrada, etapasCompletas } from '../db/pendencia';
 import {
   janelaDoMomento,
   lerHorarios,
@@ -510,6 +510,7 @@ export function ExecucaoInspecao({
     for (const item of verificacao.itens) {
       gravadas[item.id] = salvarResposta(inspecao.id, item.id, resposta);
     }
+    avisarSeCompletouEtapa(verificacao.itens.map((item) => item.id));
     setRespostas((atual) => {
       const novo = { ...atual };
       for (const item of verificacao.itens) novo[item.id] = resposta;
@@ -575,12 +576,35 @@ export function ExecucaoInspecao({
     });
   }, [inspecao.id, trilha, modo, respondidos, itens.length]);
 
+  /**
+   * Se a resposta que acabou de entrar COMPLETOU a etapa, refaz os
+   * alertas (entrega 3): o aviso da etapa feita não pode tocar mais tarde.
+   * Só reagenda na virada para completa — a cada toque seria trabalho à
+   * toa no sistema de notificações.
+   */
+  function avisarSeCompletouEtapa(itemIds: string[]) {
+    if (trilha !== 'diario' || !horarios) return;
+    // A mesma regra que o banco usa para decidir os alertas.
+    const previstos = itens.map((item) => ({
+      id: item.id,
+      momento: momentoDoItem[item.id] ?? 'servico',
+    }));
+    const antes = new Set(Object.keys(respostas));
+    const depois = new Set([...antes, ...itemIds]);
+    const eram = etapasCompletas(previstos, antes);
+    const ficaram = etapasCompletas(previstos, depois);
+    if ([...ficaram].some((momento) => !eram.has(momento))) {
+      void reagendarAlertas(estabelecimento);
+    }
+  }
+
   function gravar(itemId: string, resposta: Resposta) {
     // Conferido aqui, e não só no toque: o "não se aplica" passa por um
     // alerta de confirmação, e a janela pode fechar enquanto ele está aberto.
     if (foraDaJanela(itemId)) return;
 
     const quando = salvarResposta(inspecao.id, itemId, resposta);
+    avisarSeCompletouEtapa([itemId]);
     setRespostas((atual) => ({ ...atual, [itemId]: resposta }));
     setHoras((atual) => ({ ...atual, [itemId]: quando }));
     // Mesma regra do banco: "corrigido na hora" só existe em inadequado.

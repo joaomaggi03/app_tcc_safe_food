@@ -91,6 +91,25 @@ export function contarPendencias(entrada: EntradaPendencias): Pendencias {
   return resultado;
 }
 
+/**
+ * As etapas COMPLETAS: todos os itens previstos delas respondidos.
+ * Etapa sem item previsto conta como completa — não há o que fazer.
+ *
+ * Uma regra só para a tela (reagendar quando uma etapa completa) e o
+ * banco (`etapasFeitasHoje`, que decide quais alertas tocam). Antes eram
+ * duas versões que coincidiam só por causa do dado (achado do `fiscal`).
+ */
+export function etapasCompletas(
+  previstos: ItemPrevisto[],
+  respondidos: ReadonlySet<string>,
+): Set<MomentoDia> {
+  const completas = new Set<MomentoDia>(['abertura', 'servico', 'fechamento']);
+  for (const item of previstos) {
+    if (!respondidos.has(item.id)) completas.delete(item.momento);
+  }
+  return completas;
+}
+
 /** Soma as pendências de várias diárias — o total do mês. */
 export function somarPendencias(lista: Pendencias[]): Pendencias {
   const soma = semPendencias();

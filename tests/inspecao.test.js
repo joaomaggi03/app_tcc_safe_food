@@ -174,3 +174,24 @@ test('editar o horário só alcança a diária de hoje em andamento', () => {
   assert.equal(hora(ontemAberta).hora_abertura, null, 'a de ontem fica como estava');
   assert.equal(hora(auditoria).hora_abertura, null, 'auditoria não tem janela');
 });
+
+/**
+ * Entrega 3: a diária de HOJE que decide os alertas de etapa. Se houver
+ * uma concluída e outra aberta no mesmo dia (refazer de teste), vale a
+ * concluída — o dia está fechado e nenhum aviso deve tocar.
+ */
+test('etapasFeitasHoje lê a concluída de hoje antes da aberta', () => {
+  const db = banco();
+  const aberta = abrir(db, 'diario', HOJE);
+  const concluida = abrir(db, 'diario', HOJE);
+  db.runSync("UPDATE inspecao SET status = 'concluida' WHERE id = ?", concluida);
+  abrir(db, 'diario', ONTEM);
+
+  const escolhida = db.getFirstSync(
+    sqlQueContem("ORDER BY status = 'concluida' DESC, id DESC LIMIT 1"),
+    1,
+    HOJE,
+  );
+  assert.equal(escolhida.id, concluida);
+  assert.notEqual(escolhida.id, aberta);
+});

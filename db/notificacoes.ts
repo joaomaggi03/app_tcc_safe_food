@@ -37,14 +37,25 @@
 
 import type * as TipoNotificacoes from 'expo-notifications';
 import { Platform } from 'react-native';
+import { alertasDeEtapa } from './alertaEtapa';
 import {
+  etapasFeitasHoje,
   obterResumoInspecao,
   type Estabelecimento,
   type ModoInspecao,
+  type MomentoDia,
   type Trilha,
 } from './consultas';
 import { diaLocalISO, diferencaEmDias } from './datas';
 import { proximoDiaAberto } from './funcionamento';
+import {
+  ANTECEDENCIA_FECHAMENTO,
+  formatarHora,
+  janelaDoMomento,
+  lerHorarios,
+  minutoDoDia,
+  type Horarios,
+} from './janela';
 import {
   ANTECEDENCIA_DIAS,
   HORA_LEMBRETE,
@@ -235,13 +246,25 @@ function quandoAlertar(status: StatusTrilha, diasFuncionamento: string | null): 
 }
 
 /**
- * Cancela e reagenda os alertas das três trilhas.
+ * Cancela e reagenda os alertas das três trilhas e os das etapas da
+ * diária (entrega 3).
  *
  * Silencioso por natureza: se o ambiente não suporta ou a permissão foi
  * negada, simplesmente não agenda nada e devolve 0. Nenhuma tela precisa
  * tratar erro por causa disso.
+ *
+ * Passa pela FILA: desde a entrega 3 ele é chamado também ao completar
+ * uma etapa, e dois "cancela tudo e agenda" intercalados deixariam alerta
+ * duplicado ou faltando.
  */
-export async function reagendarAlertas(estabelecimento: Estabelecimento): Promise<number> {
+export function reagendarAlertas(estabelecimento: Estabelecimento): Promise<number> {
+  let agendados = 0;
+  return enfileirar(async () => {
+    agendados = await agendarTudo(estabelecimento);
+  }).then(() => agendados);
+}
+
+async function agendarTudo(estabelecimento: Estabelecimento): Promise<number> {
   const Notifications = carregar();
   if (!Notifications) return 0;
 
@@ -279,7 +302,68 @@ export async function reagendarAlertas(estabelecimento: Estabelecimento): Promis
     agendados += 1;
   }
 
+  // AS ETAPAS DA DIÁRIA: quando cada uma abre, nos próximos dias abertos.
+  // A regra (horários, dia fechado, etapa já feita) mora no alertaEtapa.ts.
+  const horarios = lerHorarios(estabelecimento.hora_abertura, estabelecimento.hora_fechamento);
+  const agora = new Date();
+  const alertas = alertasDeEtapa({
+    horarios,
+    diasFuncionamento: estabelecimento.dias_funcionamento,
+    hoje: diaLocalISO(agora),
+    minutoAgora: minutoDoDia(agora),
+    feitasHoje: etapasFeitasHoje(estabelecimento.id),
+  });
+
+  for (const alerta of alertas) {
+    if (!horarios) break;
+    const [ano, mes, dia] = alerta.dia.split('-').map(Number);
+    const { titulo, corpo } = textoDaEtapa(alerta.momento, horarios, estabelecimento.nome);
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: titulo,
+        body: corpo,
+        data: { trilha: 'diario' satisfies Trilha, etapa: alerta.momento },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(ano, mes - 1, dia, 0, alerta.minuto, 0),
+        channelId: CANAL_ANDROID,
+      },
+    });
+    agendados += 1;
+  }
+
   return agendados;
+}
+
+/**
+ * O texto do alerta de cada etapa. Diz ATÉ QUANDO a etapa aceita
+ * resposta: é o que transforma o lembrete em prazo.
+ */
+function textoDaEtapa(
+  momento: MomentoDia,
+  horarios: Horarios,
+  nome: string,
+): { titulo: string; corpo: string } {
+  const ate = (minuto: number) => formatarHora(minuto);
+  switch (momento) {
+    case 'abertura':
+      return {
+        titulo: 'Hora das verificações de abertura',
+        corpo: `Faça as verificações de “antes de abrir” do ${nome}. A etapa aceita resposta até ${ate(janelaDoMomento('abertura', horarios).fim)}.`,
+      };
+    case 'servico':
+      return {
+        titulo: 'O expediente começou',
+        corpo: `Marque as verificações de “durante o serviço” conforme acontecem, até ${ate(horarios.fechamento)}.`,
+      };
+    case 'fechamento':
+      return {
+        titulo: 'Hora das verificações de fechamento',
+        corpo: `Faltam ${ANTECEDENCIA_FECHAMENTO} minutos para fechar o ${nome}. Faça as verificações de fechamento até a meia-noite e conclua a diária.`,
+      };
+  }
 }
 
 /**

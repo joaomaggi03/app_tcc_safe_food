@@ -24,7 +24,12 @@ import { atendimentoDosItens } from './faixa';
 import { abreNoDia, normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
 import { formatarHora, lerHorarios, minutoDoDia } from './janela';
-import { contarPendencias, somarPendencias, type Pendencias } from './pendencia';
+import {
+  contarPendencias,
+  etapasCompletas,
+  somarPendencias,
+  type Pendencias,
+} from './pendencia';
 import { calcularSequencia, type Sequencia } from './sequencia';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -1132,6 +1137,45 @@ export function pendenciasDaDiaria(inspecaoId: number): Pendencias | null {
   const inspecao = db.getFirstSync<Inspecao>('SELECT * FROM inspecao WHERE id = ?', inspecaoId);
   if (!inspecao) return null;
   return calcularPendencias(inspecao, momentosDosItensDiarios(), new Date());
+}
+
+/**
+ * As etapas da diária de HOJE já completas — todos os itens previstos
+ * delas respondidos (entrega 3: o alerta de etapa feita não toca).
+ *
+ * Diária concluída: as três. Sem diária hoje, ou sem lista congelada:
+ * nenhuma — na dúvida, avisar. Etapa sem item previsto conta como feita:
+ * não há o que lembrar.
+ */
+export function etapasFeitasHoje(estabelecimentoId: number): Set<MomentoDia> {
+  const todas: MomentoDia[] = ['abertura', 'servico', 'fechamento'];
+  const diaria = obterBanco().getFirstSync<Inspecao>(
+    `SELECT * FROM inspecao
+      WHERE estabelecimento_id = ? AND trilha = 'diario' AND dia_local = ?
+      ORDER BY status = 'concluida' DESC, id DESC LIMIT 1`,
+    estabelecimentoId,
+    diaLocalISO(),
+  );
+  if (!diaria) return new Set();
+  if (diaria.status === 'concluida') return new Set(todas);
+
+  const ids = previstosDaDiaria(diaria);
+  if (!ids) return new Set();
+
+  const momentos = momentosDosItensDiarios();
+  const respondidos = new Set(
+    obterBanco()
+      .getAllSync<{ item_id: string }>(
+        'SELECT item_id FROM resposta WHERE inspecao_id = ?',
+        diaria.id,
+      )
+      .map((linha) => linha.item_id),
+  );
+
+  return etapasCompletas(
+    ids.map((id) => ({ id, momento: momentos[id] ?? 'servico' })),
+    respondidos,
+  );
 }
 
 export interface PendenciasDoPeriodo {

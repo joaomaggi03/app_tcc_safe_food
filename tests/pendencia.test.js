@@ -101,6 +101,21 @@ test('etapaEncerrada: as três portas', () => {
   assert.equal(etapaEncerrada('abertura', { ...base, concluida: false }), true);
 });
 
+test('etapasCompletas: completa quando todos os itens dela têm resposta', () => {
+  const { etapasCompletas } = pendencia();
+  const nada = etapasCompletas(PREVISTOS, new Set());
+  assert.deepEqual([...nada], [], 'nenhuma etapa com item respondido');
+
+  const abertura = etapasCompletas(PREVISTOS, new Set(['a1', 'a2', 's1']));
+  assert.deepEqual([...abertura].sort(), ['abertura'], 'serviço ainda falta s2');
+
+  const semFechamento = etapasCompletas(
+    PREVISTOS.filter((i) => i.momento !== 'fechamento'),
+    new Set(),
+  );
+  assert.ok(semFechamento.has('fechamento'), 'etapa sem item previsto conta como completa');
+});
+
 test('somarPendencias junta o mês por etapa', () => {
   const soma = somarPendencias([
     { total: 2, porEtapa: { abertura: 2, servico: 0, fechamento: 0 } },

@@ -35,7 +35,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "icones": "node assets/fonte/gerar-icones.mjs",
-    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/backup.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/janela.ts db/pendencia.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
+    "pretest": "tsc data/rdc216.ts data/rotina-diaria.ts db/acao.ts db/alertaEtapa.ts db/backup.ts db/datas.ts db/faixa.ts db/funcionamento.ts db/janela.ts db/pendencia.ts db/sequencia.ts db/vencimento.ts db/schema.ts db/seed.ts theme/rotulos.ts --ignoreConfig --outDir tests/.compilado --module commonjs --target es2020 --skipLibCheck",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "private": true

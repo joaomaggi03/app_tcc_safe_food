@@ -467,7 +467,8 @@ exportação em PDF (RF08).
      pela mesma razão da sequência: não verificar ≠ verificar e estar
      errado. Derivada, nunca gravada (**feita** — ver abaixo);
   3. notificação local quando cada etapa abre (só em dia aberto, e não se
-     a etapa já foi feita), no agendamento de `db/notificacoes.ts`;
+     a etapa já foi feita), no agendamento de `db/notificacoes.ts`
+     (**feita** — ver "Alertas por etapa");
   4. plano de ação PRONTO para um item só, como exemplo (o orientador
      sugeriu um catálogo por item e reconheceu que para os 89 seria
      demais). Catálogo local em `data/`, levado ao SQLite pelo seed.
@@ -613,16 +614,59 @@ exportação em PDF (RF08).
       COBERTURA do resultado ("X de Y avaliados"). Ter a resposta pronta.
     - Pendência não é conceito da RDC 216: é métrica de adesão do app,
       como as tolerâncias de 30 min.
-  - **Para a entrega 3 (alerta por etapa), decidir antes:** a janela
-    "antes de abrir" começa às 00:00, então "avisar quando abre" daria
-    alerta à meia-noite — a hora desse alerta é decisão nova; o que é
-    etapa "feita" (todos respondidos?); responder não reagenda os
-    alertas hoje (só abrir o app e concluir); e se há alerta sem horário
-    cadastrado.
+  - As perguntas que a entrega 3 levantou foram decididas lá (ver
+    "Alertas por etapa").
   - **Para o RF08:** diária anterior à v12 deve sair como "pendências não
     disponíveis", e não "0"; o PDF traz a hora de cada resposta e as
     pendências por etapa.
-- **Próxima: entregas 3 e 4 dos pedidos do orientador, depois o RF08** —
+- **Alertas por etapa da diária (feito — entrega 3; sem migração).**
+  Regras decididas com o autor em 21/10/2026, em `db/alertaEtapa.ts`
+  (módulo **puro**, testado em `tests/alertaEtapa.test.js`):
+  - **"Antes de abrir": 30 min ANTES da abertura** — a janela dessa etapa
+    começa à meia-noite, e um alerta às 00:00 não serve a ninguém.
+    "Durante o serviço": na abertura. "No fechamento": 30 min antes de
+    fechar. As antecedências REUSAM as tolerâncias do `janela.ts`, para o
+    alerta nunca tocar com a etapa ainda fechada. Abertura antes das
+    00:30 põe o alerta à meia-noite, não no dia anterior.
+  - **Só em dia aberto**; **sem horário cadastrado, nenhum alerta de
+    etapa** (o lembrete diário da trilha continua).
+  - **Etapa "feita" = todos os itens previstos dela respondidos**
+    (qualquer resposta). Diária concluída = as três feitas. Sem diária
+    hoje: avisa. A regra é UMA função pura, `etapasCompletas` em
+    `db/pendencia.ts`, usada pelo banco (`etapasFeitasHoje`, sobre a
+    lista congelada da v12) e pela tela (`avisarSeCompletouEtapa`). A
+    primeira versão tinha duas cópias que só coincidiam por causa do dado
+    (achado do `fiscal`).
+  - **Na prática**, "etapa feita não é avisada" só suprime o alerta de
+    "antes de abrir" (o único que toca ANTES de a janela abrir — dá para
+    completar a etapa antes do aviso) e os de uma diária já concluída.
+    Serviço e fechamento abrem no mesmo minuto do aviso.
+  - Agenda os próximos **7 dias** com o horário do CADASTRO (os dias
+    futuros não têm diária para congelar) — no máximo 21 alertas além
+    dos das trilhas. A semana "anda" porque o agendamento é refeito ao
+    abrir o app E ao VOLTAR a ele (`AppState` no `_layout`). Mesmo
+    assim, **depende de o app ser aberto ao menos uma vez por semana** —
+    vale dizer no texto do TCC.
+  - Continua "cancela tudo e reagenda" (`reagendarAlertas`), agora
+    também: ao salvar o cadastro (o `_layout` observa o estabelecimento
+    inteiro), ao voltar ao app e quando uma resposta COMPLETA uma etapa
+    na execução (só na virada, não a cada toque). Por isso o
+    `reagendarAlertas` passou a rodar na FILA do módulo: dois "cancela e
+    agenda" intercalados deixariam alerta duplicado ou faltando. Efeito
+    colateral aceito: no primeiro acesso, enquanto o pedido de permissão
+    está na tela, a notificação de andamento espera na fila.
+  - Dois toques muito rápidos nos últimos itens de uma etapa podem não
+    reagendar (a tela compara com o estado da renderização anterior); o
+    alerta indevido some na próxima abertura. Raro, aceito.
+  - O texto diz ATÉ QUANDO a etapa aceita resposta (no fechamento, "até
+    a meia-noite") — é o que faz do lembrete um prazo. Mesmo canal dos
+    vencimentos; o toque só abre o app (levar à aba Hoje seria melhoria).
+  - **A confirmar no aparelho:** o `app.json` não declara
+    `SCHEDULE_EXACT_ALARM`; no Android 12+ o alarme pode atrasar alguns
+    minutos, o que pesa numa janela de 30.
+  - **Para testar sem esperar:** cadastrar a abertura ~32 min à frente
+    do relógio; o alerta de "antes de abrir" toca em ~2 min.
+- **Próxima: entrega 4 dos pedidos do orientador, depois o RF08** —
   exportação em PDF. Depois, revisar o texto do TCC contra o que foi
   construído (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
