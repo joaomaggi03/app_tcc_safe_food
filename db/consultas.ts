@@ -23,13 +23,15 @@ import { diaComHora, diaDaSemana, diaLocalHaDias, diaLocalISO, somarDias } from 
 import { atendimentoDosItens } from './faixa';
 import { abreNoDia, normalizarFuncionamento } from './funcionamento';
 import { obterBanco } from './index';
-import { formatarHora, lerHorarios } from './janela';
+import { formatarHora, lerHorarios, minutoDoDia } from './janela';
+import { contarPendencias, somarPendencias, type Pendencias } from './pendencia';
 import { calcularSequencia, type Sequencia } from './sequencia';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
 export type { MomentoDia };
 export type { DiaDaSequencia, Sequencia, SituacaoSequencia } from './sequencia';
 export type { SituacaoAcao, StatusAcao } from './acao';
+export type { Pendencias, PorEtapa } from './pendencia';
 
 // ---------------------------------------------------------------
 // CATÁLOGO DA NORMA
@@ -224,6 +226,20 @@ export function salvarEstabelecimento(dados: DadosEstabelecimento): Estabelecime
       horaAbertura,
       horaFechamento,
       existente.id,
+    );
+
+    // A diária DE HOJE ainda aberta acompanha a edição: o horário é
+    // congelado por DIA, e hoje ainda está acontecendo — quem corrige o
+    // horário às 10h quer a correção valendo já. As concluídas e as de
+    // dias passados não mudam (schema v12).
+    db.runSync(
+      `UPDATE inspecao SET hora_abertura = ?, hora_fechamento = ?
+        WHERE estabelecimento_id = ? AND trilha = 'diario'
+          AND status = 'em_andamento' AND dia_local = ?`,
+      horaAbertura,
+      horaFechamento,
+      existente.id,
+      diaLocalISO(),
     );
   } else {
     db.runSync(
@@ -739,6 +755,11 @@ export interface Inspecao {
   dia_local: string | null;
   total_itens: number | null;
   status: 'em_andamento' | 'concluida';
+  /** Horário do estabelecimento naquele dia (schema v12) — só na diária. */
+  hora_abertura: string | null;
+  hora_fechamento: string | null;
+  /** JSON com os ids dos itens previstos, gravado na conclusão (v12). */
+  itens_previstos: string | null;
 }
 
 /**
@@ -782,31 +803,85 @@ export function iniciarInspecao(
     hoje,
   );
 
+  // A DIÁRIA congela, NA ABERTURA, o horário e os itens do dia (schema
+  // v12): são a régua das janelas e das pendências DESTE dia, e não podem
+  // mudar quando o cadastro ou o RF09 mudarem amanhã — nem para a diária
+  // largada aberta. As outras trilhas não têm janela.
+  const congelado = trilha === 'diario' ? congeladoDaDiaria(estabelecimentoId) : null;
+
   if (emAndamento) {
+    // Diária de hoje aberta ANTES da v12: recebe agora o que lhe faltou.
+    // É o mesmo dia, então o horário e o checklist de agora são os dela.
+    if (congelado && emAndamento.itens_previstos === null) {
+      db.runSync(
+        `UPDATE inspecao
+            SET hora_abertura = COALESCE(hora_abertura, ?),
+                hora_fechamento = COALESCE(hora_fechamento, ?),
+                itens_previstos = ?
+          WHERE id = ?`,
+        congelado.horaAbertura,
+        congelado.horaFechamento,
+        congelado.itensPrevistos,
+        emAndamento.id,
+      );
+    }
     if (emAndamento.modo !== modo) {
       db.runSync('UPDATE inspecao SET modo = ? WHERE id = ?', modo, emAndamento.id);
-      return { ...emAndamento, modo };
     }
-    return emAndamento;
+    return db.getFirstSync<Inspecao>('SELECT * FROM inspecao WHERE id = ?', emAndamento.id)!;
   }
 
   // `dia_local` é gravado na ABERTURA, não na conclusão: ele diz a que
   // DIA esta inspeção se refere. Uma diária começada às 23h50 e concluída
   // às 00h10 pertence ao dia em que o expediente aconteceu.
   const resultado = db.runSync(
-    `INSERT INTO inspecao (estabelecimento_id, trilha, modo, data_inicio, dia_local, status)
-     VALUES (?, ?, ?, ?, ?, 'em_andamento')`,
+    `INSERT INTO inspecao (estabelecimento_id, trilha, modo, data_inicio, dia_local, status,
+                           hora_abertura, hora_fechamento, itens_previstos)
+     VALUES (?, ?, ?, ?, ?, 'em_andamento', ?, ?, ?)`,
     estabelecimentoId,
     trilha,
     modo,
     agoraISO(),
     hoje,
+    congelado?.horaAbertura ?? null,
+    congelado?.horaFechamento ?? null,
+    congelado?.itensPrevistos ?? null,
   );
 
   return db.getFirstSync<Inspecao>(
     'SELECT * FROM inspecao WHERE id = ?',
     resultado.lastInsertRowId,
   )!;
+}
+
+/**
+ * O que a diária congela ao abrir: o horário do cadastro e os ids do
+ * checklist diário de agora (perfil + itens ocultos), em JSON. A
+ * conclusão regrava a lista com a que a tela mostrou.
+ */
+function congeladoDaDiaria(estabelecimentoId: number): {
+  horaAbertura: string | null;
+  horaFechamento: string | null;
+  itensPrevistos: string;
+} | null {
+  const est = obterBanco().getFirstSync<{
+    perfil_id: string;
+    hora_abertura: string | null;
+    hora_fechamento: string | null;
+  }>(
+    'SELECT perfil_id, hora_abertura, hora_fechamento FROM estabelecimento WHERE id = ?',
+    estabelecimentoId,
+  );
+  if (!est) return null;
+
+  const ids = checklistDoPerfil(est.perfil_id, { trilha: 'diario', estabelecimentoId }).flatMap(
+    (grupo) => grupo.secoes.flatMap((secao) => secao.itens.map((item) => item.id)),
+  );
+  return {
+    horaAbertura: est.hora_abertura,
+    horaFechamento: est.hora_fechamento,
+    itensPrevistos: JSON.stringify(ids),
+  };
 }
 
 /**
@@ -939,17 +1014,18 @@ export function salvarResposta(
 }
 
 /**
- * Fecha a inspeção: carimba as datas, congela o tamanho e muda o status.
+ * Fecha a inspeção: carimba as datas, congela o checklist e muda o status.
  *
- * `totalItens` é quantos itens o checklist tinha na hora. Guardamos em
- * vez de recontar depois porque o checklist é vivo: ocultar um item
- * (RF09) amanhã não pode mudar o "22 de 32 observados" de uma inspeção
- * de hoje. Score de arquivo tem que ser reprodutível.
+ * `itensPrevistos` são os ids dos itens que o checklist tinha na hora; o
+ * tamanho vira `total_itens`, e a lista, `itens_previstos` (v12).
+ * Guardamos em vez de recontar depois porque o checklist é vivo: ocultar
+ * um item (RF09) amanhã não pode mudar o "22 de 32 observados" — nem as
+ * pendências — de uma inspeção de hoje. Arquivo tem que ser reprodutível.
  *
  * Na Fase 5, `data_conclusao` vira a base do próximo vencimento da
  * trilha — por isso ela só é gravada aqui, e não a cada resposta.
  */
-export function concluirInspecao(inspecaoId: number, totalItens: number): void {
+export function concluirInspecao(inspecaoId: number, itensPrevistos: string[]): void {
   const resultado = obterBanco().runSync(
     `UPDATE inspecao
         SET status = 'concluida',
@@ -957,11 +1033,15 @@ export function concluirInspecao(inspecaoId: number, totalItens: number): void {
             -- COALESCE porque o dia já foi gravado na abertura; só cai no
             -- valor de hoje em inspeções criadas antes do schema v4.
             dia_local = COALESCE(dia_local, ?),
-            total_itens = ?
+            total_itens = ?,
+            -- QUAIS itens (v12), e não só quantos: é o que diz, depois,
+            -- quais ficaram sem resposta — as pendências do dia.
+            itens_previstos = ?
       WHERE id = ? AND status = 'em_andamento'`,
     agoraISO(),
     diaLocalISO(),
-    totalItens,
+    itensPrevistos.length,
+    JSON.stringify(itensPrevistos),
     inspecaoId,
   );
 
@@ -969,6 +1049,130 @@ export function concluirInspecao(inspecaoId: number, totalItens: number): void {
   // de fato: concluir de novo uma inspeção já concluída não muda nada
   // acima, e também não deve gerar nada.
   if (resultado.changes > 0) gerarAcoesDaInspecao(inspecaoId);
+}
+
+// ---------------------------------------------------------------
+// PENDÊNCIAS DA DIÁRIA (pedido do orientador, entrega 2)
+// ---------------------------------------------------------------
+
+/**
+ * A etapa de cada item diário do catálogo. Sem `momento`, 'servico' — a
+ * mesma regra com que o `checklistDoPerfil` monta os blocos da tela, para
+ * a pendência cair na etapa em que o usuário viu o item.
+ */
+function momentosDosItensDiarios(): Record<string, MomentoDia> {
+  const mapa: Record<string, MomentoDia> = {};
+  for (const linha of obterBanco().getAllSync<{ id: string; momento: MomentoDia | null }>(
+    "SELECT id, momento FROM item WHERE frequencia = 'diario'",
+  )) {
+    mapa[linha.id] = linha.momento ?? 'servico';
+  }
+  return mapa;
+}
+
+/**
+ * Os itens que a diária tinha — SEMPRE a lista congelada (v12): gravada
+ * na abertura e regravada na conclusão. Nunca o checklist de hoje: ocultar
+ * um item agora não pode reescrever as pendências de uma diária antiga,
+ * concluída ou largada aberta (achado do `fiscal`).
+ *
+ * Sem lista (diária anterior à v12, que não foi retomada depois): null,
+ * e a diária não é contada. Inventar a lista seria reescrever o passado.
+ */
+function previstosDaDiaria(inspecao: Inspecao): string[] | null {
+  if (!inspecao.itens_previstos) return null;
+  try {
+    const lista = JSON.parse(inspecao.itens_previstos);
+    return Array.isArray(lista) ? lista.map(String) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** As pendências de uma diária, ou null se não houver como contar. */
+function calcularPendencias(
+  inspecao: Inspecao,
+  momentos: Record<string, MomentoDia>,
+  agora: Date,
+): Pendencias | null {
+  if (inspecao.trilha !== 'diario' || !inspecao.dia_local) return null;
+
+  const ids = previstosDaDiaria(inspecao);
+  if (!ids) return null;
+
+  const respondidos = new Set(
+    obterBanco()
+      .getAllSync<{ item_id: string }>(
+        'SELECT item_id FROM resposta WHERE inspecao_id = ?',
+        inspecao.id,
+      )
+      .map((linha) => linha.item_id),
+  );
+
+  return contarPendencias({
+    previstos: ids.map((id) => ({ id, momento: momentos[id] ?? 'servico' })),
+    respondidos,
+    concluida: inspecao.status === 'concluida',
+    // O horário DAQUELE dia, congelado na inspeção — não o de hoje.
+    horarios: lerHorarios(inspecao.hora_abertura, inspecao.hora_fechamento),
+    dia: inspecao.dia_local,
+    hoje: diaLocalISO(agora),
+    minuto: minutoDoDia(agora),
+  });
+}
+
+/**
+ * As pendências de uma diária — null fora da diária ou sem dados para
+ * contar. (Não confundir com `pendenciasDaInspecao`, mais abaixo, que é
+ * do plano de ação: lá "pendência" é item INADEQUADO a corrigir; aqui é
+ * item NÃO VERIFICADO a tempo.)
+ */
+export function pendenciasDaDiaria(inspecaoId: number): Pendencias | null {
+  const db = obterBanco();
+  const inspecao = db.getFirstSync<Inspecao>('SELECT * FROM inspecao WHERE id = ?', inspecaoId);
+  if (!inspecao) return null;
+  return calcularPendencias(inspecao, momentosDosItensDiarios(), new Date());
+}
+
+export interface PendenciasDoPeriodo {
+  /** Soma das pendências, no total e por etapa. */
+  pendencias: Pendencias;
+  /** Quantas diárias entraram na conta. */
+  diarias: number;
+  /** Em quantas delas houve ao menos uma pendência. */
+  diariasComPendencia: number;
+  janelaDias: number;
+}
+
+/**
+ * As pendências das diárias dos últimos 30 dias, POR ETAPA — o "mapa" que
+ * o orientador pediu: em que hora do expediente as verificações se perdem.
+ *
+ * Mesma janela da rotina do mês (`JANELA_ROTINA_DIAS`). Entram as
+ * concluídas, as largadas abertas e a de hoje em andamento; ficam de
+ * fora as anteriores à v12, que não guardaram quais itens tinham.
+ */
+export function pendenciasDoPeriodo(estabelecimentoId: number): PendenciasDoPeriodo {
+  const db = obterBanco();
+  const diarias = db.getAllSync<Inspecao>(
+    `SELECT * FROM inspecao
+      WHERE estabelecimento_id = ? AND trilha = 'diario' AND dia_local >= ?`,
+    estabelecimentoId,
+    diaLocalHaDias(JANELA_ROTINA_DIAS - 1),
+  );
+
+  const momentos = momentosDosItensDiarios();
+  const agora = new Date();
+  const contadas = diarias
+    .map((inspecao) => calcularPendencias(inspecao, momentos, agora))
+    .filter((pendencias): pendencias is Pendencias => pendencias !== null);
+
+  return {
+    pendencias: somarPendencias(contadas),
+    diarias: contadas.length,
+    diariasComPendencia: contadas.filter((pendencias) => pendencias.total > 0).length,
+    janelaDias: JANELA_ROTINA_DIAS,
+  };
 }
 
 // ---------------------------------------------------------------
@@ -1969,7 +2173,8 @@ function baseDasDiariasDeTeste(
  * tiver diária. Devolve se gravou.
  *
  * Respostas quase todas "adequado", com um "não observado" e, conforme
- * a `variacao`, um inadequado CORRIGIDO NA HORA — que não vira ação. E
+ * a `variacao`, um inadequado CORRIGIDO NA HORA — que não vira ação — e,
+ * em parte dos dias, um item SEM RESPOSTA, que vira pendência (v12). E
  * não chama `gerarAcoesDaInspecao`: o plano de ação não recebe itens
  * inventados.
  */
@@ -1998,18 +2203,25 @@ function gravarDiariaDeTeste(
   // `modo = 'teste'` é a marca que o `apagarDadosDeTeste` procura.
   const { lastInsertRowId: inspecaoId } = db.runSync(
     `INSERT INTO inspecao
-       (estabelecimento_id, trilha, modo, data_inicio, data_conclusao, dia_local, status, total_itens)
-     VALUES (?, 'diario', 'teste', ?, ?, ?, 'concluida', ?)`,
+       (estabelecimento_id, trilha, modo, data_inicio, data_conclusao, dia_local, status,
+        total_itens, itens_previstos)
+     VALUES (?, 'diario', 'teste', ?, ?, ?, 'concluida', ?, ?)`,
     estabelecimentoId,
     iniciadaEm.toISOString(),
     concluidaEm.toISOString(),
     dia,
     itens.length,
+    JSON.stringify(itens),
   );
 
   itens.forEach((itemId, indice) => {
     const naoObservado = indice === (variacao * 5) % itens.length;
     const corrigido = variacao % 3 === 0 && indice === (variacao * 7) % itens.length;
+    // Um dia em cada quatro fica com um item sem resposta: a pendência
+    // que o cartão da Conformidade mostra na demonstração.
+    const pendente =
+      variacao % 4 === 1 && indice === (variacao * 3) % itens.length && !naoObservado && !corrigido;
+    if (pendente) return;
     db.runSync(
       `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em, corrigido_na_hora)
        VALUES (?, ?, ?, ?, ?)`,

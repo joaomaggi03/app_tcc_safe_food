@@ -43,9 +43,11 @@ import {
   diaLocalISO,
   listarInspecoes,
   listarPerfis,
+  pendenciasDaDiaria,
   sequenciaDiaria,
   type Estabelecimento,
   type ModoInspecao,
+  type Pendencias,
   type ResumoInspecao,
   type Sequencia,
   type Trilha,
@@ -61,6 +63,7 @@ import {
   ROTULO_MODO,
   ROTULO_TRILHA,
   textoCriticos,
+  textoPendencias,
   textoSequencia,
   textoUltimaConclusao,
   textoVencimento,
@@ -101,6 +104,8 @@ interface DadosHoje {
   emAndamento: ResumoInspecao | null;
   /** A diária DE HOJE já concluída, se houver. */
   concluida: ResumoInspecao | null;
+  /** As pendências da diária concluída de hoje (null sem ela). */
+  pendenciasHoje: Pendencias | null;
   prazos: StatusTrilha[];
   itensDiarios: number;
   verificacoes: number;
@@ -146,11 +151,13 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
     const diarias = listarInspecoes(estabelecimento.id, { trilha: 'diario' });
 
     const deHoje = diarias.filter((inspecao) => inspecao.dia_local === hoje);
+    const concluida = deHoje.find((i) => i.status === 'concluida') ?? null;
 
     setDados({
       dia: hoje,
       emAndamento: deHoje.find((i) => i.status === 'em_andamento') ?? null,
-      concluida: deHoje.find((i) => i.status === 'concluida') ?? null,
+      concluida,
+      pendenciasHoje: concluida ? pendenciasDaDiaria(concluida.id) : null,
       prazos: statusDasTrilhas(estabelecimento),
       itensDiarios: contarItensPorTrilha(estabelecimento.perfil_id, estabelecimento.id).diario,
       verificacoes: contarVerificacoesDaRotina(estabelecimento.perfil_id, estabelecimento.id),
@@ -245,6 +252,7 @@ function Hoje({ estabelecimento }: { estabelecimento: Estabelecimento }) {
       {concluida ? (
         <DiaConcluido
           inspecao={concluida}
+          pendencias={dados.pendenciasHoje}
           aoAbrir={() => router.push(`/resultado?id=${concluida.id}`)}
         />
       ) : !dados.sequencia.abreHoje && !abrirFechado ? (
@@ -559,9 +567,12 @@ function Abertura({
 /** O dia já fechado: o resumo, e o caminho para o detalhamento. */
 function DiaConcluido({
   inspecao,
+  pendencias,
   aoAbrir,
 }: {
   inspecao: ResumoInspecao;
+  /** Itens que ficaram sem resposta a tempo — o detalhe por etapa está no resultado. */
+  pendencias: Pendencias | null;
   aoAbrir: () => void;
 }) {
   const criticos = textoCriticos(inspecao.score);
@@ -598,6 +609,17 @@ function DiaConcluido({
           />
           <Text style={[estilos.criticosTexto, temFalha && estilos.criticosTextoAlerta]}>
             {criticos}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Pendência ao lado dos críticos, e não dentro do medidor: ela não
+          entra no score, e o desenho tem que dizer isso. */}
+      {pendencias && pendencias.total > 0 ? (
+        <View style={estilos.pendencias}>
+          <Ionicons name="time-outline" size={15} color={Cores.acentoTexto} />
+          <Text style={estilos.pendenciasTexto}>
+            {textoPendencias(pendencias.total)}: itens sem resposta a tempo
           </Text>
         </View>
       ) : null}
@@ -750,6 +772,16 @@ const estilos = StyleSheet.create({
   criticosAlerta: { backgroundColor: Cores.acentoSuave },
   criticosTexto: { flex: 1, fontSize: 13, fontWeight: '600', color: Cores.primariaTexto },
   criticosTextoAlerta: { color: Cores.acentoForte },
+  pendencias: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: Cores.fundo,
+  },
+  pendenciasTexto: { flex: 1, fontSize: 13, fontWeight: '600', color: Cores.acentoTexto },
   verDetalhe: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -325,6 +325,39 @@ test('os horários de funcionamento vão e voltam no backup', () => {
   assert.deepEqual({ ...e }, { hora_abertura: '07:00', hora_fechamento: '22:00' });
 });
 
+/**
+ * v12: o que as pendências precisam vai e volta com a inspeção. Sem os
+ * itens previstos, a diária restaurada deixaria de ser contada.
+ */
+test('o horário e os itens previstos da diária vão e voltam no backup', () => {
+  const origem = cenario();
+  const id = novaInspecao(origem);
+  origem.runSync(
+    `UPDATE inspecao SET hora_abertura = '07:00', hora_fechamento = '22:00',
+                         itens_previstos = '["i1","i2"]' WHERE id = ?`,
+    id,
+  );
+  const { linhas } = montarPacote(origem, null);
+
+  const destino = cenario();
+  destino.runSync('DELETE FROM estabelecimento');
+  restaurar(destino, USUARIO, {
+    estabelecimento: linhas.estabelecimento[0],
+    inspecao: linhas.inspecao,
+    resposta: [],
+    item_oculto: [],
+    acao: [],
+  });
+
+  const i = destino.getFirstSync(
+    'SELECT hora_abertura, hora_fechamento, itens_previstos FROM inspecao',
+  );
+  assert.deepEqual(
+    { ...i },
+    { hora_abertura: '07:00', hora_fechamento: '22:00', itens_previstos: '["i1","i2"]' },
+  );
+});
+
 test('um backup anterior à v11, sem os horários, restaura sem horário', () => {
   const origem = cenario();
   const { linhas } = montarPacote(origem, null);

@@ -21,6 +21,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   obterResumoInspecao,
+  pendenciasDaDiaria,
   pendenciasDaInspecao,
   PESO_CRITICO,
   scorePorCategoria,
@@ -30,6 +31,7 @@ import {
   type ScoreCategoria,
 } from '../db/consultas';
 import MedidorScore from '../components/MedidorScore';
+import PendenciasPorEtapa from '../components/PendenciasPorEtapa';
 import { faixaRdc275, type GrupoRdc275 } from '../db/faixa';
 import Cores from '../theme/cores';
 import {
@@ -72,7 +74,13 @@ export default function TelaResultado() {
     if (!Number.isFinite(inspecaoId)) return null;
     const inspecao = obterResumoInspecao(inspecaoId);
     if (!inspecao) return null;
-    return { inspecao, categorias: scorePorCategoria(inspecaoId) };
+    return {
+      inspecao,
+      categorias: scorePorCategoria(inspecaoId),
+      // Só na diária, e null nas concluídas antes da v12 (ver
+      // `pendenciasDaDiaria`). Sai dos fatos congelados, como o score.
+      pendenciasDoDia: pendenciasDaDiaria(inspecaoId),
+    };
   }, [inspecaoId]);
 
   /**
@@ -91,7 +99,7 @@ export default function TelaResultado() {
     return <Redirect href="/conformidade" />;
   }
 
-  const { inspecao, categorias } = dados;
+  const { inspecao, categorias, pendenciasDoDia } = dados;
 
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
@@ -108,6 +116,13 @@ export default function TelaResultado() {
       />
       <Classificacao inspecao={inspecao} />
       <Cobertura inspecao={inspecao} />
+      {pendenciasDoDia ? (
+        <PendenciasPorEtapa
+          pendencias={pendenciasDoDia}
+          titulo="Pendências do dia"
+          nota="Itens que ficaram sem resposta depois que a etapa encerrou. Não entram no score: não verificar é diferente de verificar e estar inadequado."
+        />
+      ) : null}
       <PorCategoria categorias={categorias} />
 
       <Text style={estilos.formula}>

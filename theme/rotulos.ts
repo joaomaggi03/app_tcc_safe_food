@@ -214,6 +214,18 @@ export function textoJanela(situacao: SituacaoJanela, janela: Janela): string {
   }
 }
 
+/** O nome de cada etapa do expediente, como título (o mesmo dos blocos da diária). */
+export const ROTULO_ETAPA: Record<MomentoDia, string> = {
+  abertura: 'Antes de abrir',
+  servico: 'Durante o serviço',
+  fechamento: 'No fechamento',
+};
+
+/** "1 pendência" / "3 pendências" — itens não verificados a tempo. */
+export function textoPendencias(total: number): string {
+  return `${total} ${total === 1 ? 'pendência' : 'pendências'}`;
+}
+
 /** "às 07:12" — a hora local em que uma resposta foi dada. */
 export function textoHoraResposta(iso: string): string {
   const data = new Date(iso);

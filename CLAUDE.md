@@ -465,7 +465,7 @@ exportação em PDF (RF08).
   2. pendências: o item que perde a janela sem resposta vira pendência,
      contada À PARTE (no dia e no mês, por etapa) — **não entra no score**,
      pela mesma razão da sequência: não verificar ≠ verificar e estar
-     errado. Derivada, nunca gravada;
+     errado. Derivada, nunca gravada (**feita** — ver abaixo);
   3. notificação local quando cada etapa abre (só em dia aberto, e não se
      a etapa já foi feita), no agendamento de `db/notificacoes.ts`;
   4. plano de ação PRONTO para um item só, como exemplo (o orientador
@@ -519,13 +519,9 @@ exportação em PDF (RF08).
     apagado a qualquer momento, valendo na hora — apagar às 15h destrava o
     "antes de abrir". O app registra e orienta; não fiscaliza contra quem
     quer burlar.
-  - **Decidir antes da entrega 2:** se as pendências forem derivadas do
-    horário ATUAL do estabelecimento, mudar o horário reescreve as
-    pendências do passado — o oposto do `total_itens` congelado. A
-    alternativa é congelar o par de horários na inspeção, na abertura,
-    como já se faz com `modo` e `dia_local`. E as diárias fabricadas pelas
-    ferramentas de teste gravam todas as respostas às 18h, inclusive as de
-    "antes de abrir": vão parecer feitas fora da janela.
+  - **Horário congelado por dia — decidido na entrega 2** (schema v12,
+    abaixo): a diária guarda o horário daquele dia, e mudar o cadastro
+    não reescreve as pendências do passado.
   - **Supabase:** as duas colunas foram acrescentadas ao
     `supabase/schema.sql`, com `alter table ... add column if not
     exists` (o arquivo pode ser rodado de novo sem perigo). **Rodar o
@@ -537,7 +533,96 @@ exportação em PDF (RF08).
     nenhuma inspeção posterior sobe. A única pista é a mensagem na tela
     Conta. A restauração de um backup anterior à v11 entra sem horário
     (testado).
-- **Próxima: entregas 2 a 4 dos pedidos do orientador, depois o RF08** —
+- **Pendências da diária (schema v12, feito — entrega 2 acima).**
+  - **Pendência = item previsto na diária, sem resposta, com a etapa
+    ENCERRADA.** A etapa encerra de três jeitos: a janela fechou (só com
+    horário), a diária foi CONCLUÍDA (quem conclui declara o dia fechado)
+    ou o DIA passou (diária largada aberta). Sem horário, então, só há
+    pendência na conclusão ou na virada do dia.
+  - "Não observado" NÃO é pendência: é uma resposta (alguém olhou).
+    Pendência é não ter olhado.
+  - **Não entra no score**, e a tela mostra isso: no cartão "Dia
+    concluído" ela vem ao lado dos críticos, não dentro do medidor.
+  - `db/pendencia.ts` — módulo **puro** (`contarPendencias`,
+    `etapaEncerrada`, `somarPendencias`), testado em
+    `tests/pendencia.test.js`. A tela de execução usa a MESMA regra para
+    marcar o item "Pendente" e contar por bloco.
+  - **Derivada, nunca gravada.** O que ela precisa fica CONGELADO na
+    inspeção (schema v12, sem tabela nova):
+    - `inspecao.hora_abertura` / `hora_fechamento` — o horário DAQUELE
+      dia, copiado ao abrir a diária. A diária de HOJE ainda aberta
+      acompanha a edição do cadastro (quem corrige às 10h quer valendo
+      já); concluídas e de dias passados não mudam (testado em
+      `tests/inspecao.test.js`).
+    - `inspecao.itens_previstos` — JSON com os ids do checklist,
+      gravado NA ABERTURA e regravado na conclusão (com a lista que a
+      tela mostrou) junto do `total_itens`. É o que diz QUAIS faltaram.
+      `concluirInspecao` passou a receber a lista de ids.
+  - **A conta usa SEMPRE a lista congelada, nunca o checklist de hoje** —
+    nem para a diária largada aberta. A primeira versão recalculava a
+    largada pelo checklist atual, e ocultar um item reescrevia as
+    pendências dela (achado do `fiscal`). Sem lista (diária anterior à
+    v12): **não é contada** — inventar seria reescrever o passado.
+  - **Diária de hoje aberta antes da v12** é curada ao ser retomada: o
+    `iniciarInspecao` preenche o horário e os itens que faltavam (é o
+    mesmo dia, então os de agora são os dela).
+  - **Duas fontes de horário, que coincidem:** a tela de execução lê o
+    horário do CADASTRO (`estabelecimento`), e a contagem no banco lê o
+    CONGELADO (`inspecao`). Coincidem porque a diária de hoje recebe o
+    horário ao abrir, ao ser retomada e a cada edição do cadastro. Dias
+    passados só são lidos pelo banco. Se surgir outro caminho de edição
+    do horário, ele tem que copiar para a diária aberta também.
+  - **Sem horário, a tela continua aceitando resposta depois da
+    meia-noite** na diária que ficou aberta, e isso é DECISÃO: quem não
+    tem horário é justamente quem fecha depois da meia-noite (o cadastro
+    manda deixar em branco), e a diária começada às 23h50 pertence ao
+    dia em que o expediente aconteceu. O banco já conta a pendência de
+    ontem nesse intervalo, e ela some se o item for respondido — a
+    contagem desse dia só se firma quando a diária é concluída ou a tela
+    é trocada (a aba Hoje remonta no dia novo ao voltar ao app).
+  - A etapa de cada item vem de `item.momento` (sem momento, 'servico' —
+    a mesma regra dos blocos da tela). Se o seed mudar o momento de um
+    item, as pendências antigas mudam de etapa (não de total).
+  - **Onde aparece:** na execução (contagem no cabeçalho do bloco e
+    "Pendente" no item); no cartão "Dia concluído" da aba Hoje; no
+    resultado da diária ("Pendências do dia", por etapa); e na aba
+    Conformidade, cartão **"Pendências — 30 dias"** por etapa — é o
+    "mapa" que o orientador pediu, e fica FORA das quatro leituras
+    porque é adesão, não conformidade. Componente em
+    `components/PendenciasPorEtapa.tsx`.
+  - O alerta de concluir avisa que o que falta vira pendência.
+  - **Nome:** `pendenciasDaDiaria` (este) ≠ `pendenciasDaInspecao` (do
+    plano de ação, itens INADEQUADOS a corrigir). As duas usam a palavra
+    "pendência" com sentidos diferentes — a do plano é anterior.
+  - As diárias fabricadas pelas ferramentas de teste agora gravam
+    `itens_previstos`, e um dia em cada quatro deixa um item sem resposta,
+    para o cartão ter o que mostrar. Elas não têm horário congelado, então
+    as respostas "às 18h" não aparecem como fora da janela.
+  - Backup e `supabase/schema.sql` levam as três colunas novas
+    (`alter table ... add column if not exists`). **Mesmo aviso da v11:
+    rodar o `supabase/schema.sql` de novo antes de usar o app com conta**
+    — toda diária nova sobe com as colunas da v12, e sem elas na nuvem o
+    backup para inteiro na primeira. (Em 20/10/2026 o projeto Supabase
+    estava pausado e o app foi usado sem conta.)
+  - **Para a banca:**
+    - O dia em que ninguém abriu a diária gera ZERO pendências; ele
+      aparece na SEQUÊNCIA de dias, não aqui. Pendência mede a diária
+      começada e não terminada a tempo.
+    - Na rotina, um toque em "não observado" responde a verificação
+      inteira: zera a pendência e sai do score. Quem denuncia isso é a
+      COBERTURA do resultado ("X de Y avaliados"). Ter a resposta pronta.
+    - Pendência não é conceito da RDC 216: é métrica de adesão do app,
+      como as tolerâncias de 30 min.
+  - **Para a entrega 3 (alerta por etapa), decidir antes:** a janela
+    "antes de abrir" começa às 00:00, então "avisar quando abre" daria
+    alerta à meia-noite — a hora desse alerta é decisão nova; o que é
+    etapa "feita" (todos respondidos?); responder não reagenda os
+    alertas hoje (só abrir o app e concluir); e se há alerta sem horário
+    cadastrado.
+  - **Para o RF08:** diária anterior à v12 deve sair como "pendências não
+    disponíveis", e não "0"; o PDF traz a hora de cada resposta e as
+    pendências por etapa.
+- **Próxima: entregas 3 e 4 dos pedidos do orientador, depois o RF08** —
   exportação em PDF. Depois, revisar o texto do TCC contra o que foi
   construído (ver seção 7 do plano).
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e

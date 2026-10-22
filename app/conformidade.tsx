@@ -23,13 +23,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import PendenciasPorEtapa from '../components/PendenciasPorEtapa';
 import {
   listarInspecoes,
   painelInicio,
+  pendenciasDoPeriodo,
   resumoAcoes,
   TRILHAS,
   type Estabelecimento,
   type PainelInicio,
+  type PendenciasDoPeriodo,
   type ResumoAcoes,
   type ResumoInspecao,
   type Trilha,
@@ -88,6 +91,8 @@ export default function TelaConformidade() {
 
 interface Dados {
   painel: PainelInicio;
+  /** As pendências das diárias dos últimos 30 dias, por etapa. */
+  pendencias: PendenciasDoPeriodo;
   acoes: ResumoAcoes;
   porTrilha: Record<Trilha, ResumoInspecao[]>;
   totais: Record<Trilha, number>;
@@ -109,6 +114,7 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
     setDados({
       painel: painelInicio(estabelecimento.id),
+      pendencias: pendenciasDoPeriodo(estabelecimento.id),
       acoes: resumoAcoes(estabelecimento.id),
       porTrilha,
       totais,
@@ -131,6 +137,21 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
   return (
     <ScrollView style={estilos.tela} contentContainerStyle={estilos.conteudo}>
       <QuatroLeituras painel={dados.painel} router={router} />
+      {/* FORA das quatro leituras de propósito: pendência é ADESÃO (fez a
+          verificação na hora?), e as leituras são CONFORMIDADE. Mesma
+          separação da sequência de dias. Só aparece com diárias contadas. */}
+      {dados.pendencias.diarias > 0 ? (
+        <PendenciasPorEtapa
+          pendencias={dados.pendencias.pendencias}
+          titulo={`Pendências — ${dados.pendencias.janelaDias} dias`}
+          nota={
+            `Em ${dados.pendencias.diariasComPendencia} de ${dados.pendencias.diarias} ` +
+            `${dados.pendencias.diarias === 1 ? 'diária' : 'diárias'} ficou algum item sem ` +
+            'resposta depois que a etapa encerrou. A etapa com mais pendências é onde a rotina ' +
+            'perde a hora. Não entra no score.'
+          }
+        />
+      ) : null}
       <CartaoPlano acoes={dados.acoes} aoAbrir={() => router.push('/plano-acao')} />
 
       {vazio ? (

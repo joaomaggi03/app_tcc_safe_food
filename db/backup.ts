@@ -76,7 +76,8 @@ const LEITURA: Record<TabelaBackup, string> = {
 
   inspecao: `
     SELECT i.uuid, e.uuid AS estabelecimento_uuid, i.trilha, i.modo, i.data_inicio,
-           i.data_conclusao, i.status, i.dia_local, i.total_itens, i.atualizado_em
+           i.data_conclusao, i.status, i.dia_local, i.total_itens,
+           i.hora_abertura, i.hora_fechamento, i.itens_previstos, i.atualizado_em
       FROM inspecao i
       JOIN estabelecimento e ON e.id = i.estabelecimento_id
      WHERE i.atualizado_em >= ?`,
@@ -302,8 +303,9 @@ export function restaurar(
       const id = db.runSync(
         `INSERT INTO inspecao
            (uuid, estabelecimento_id, trilha, modo, data_inicio, data_conclusao,
-            status, dia_local, total_itens, atualizado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            status, dia_local, total_itens, hora_abertura, hora_fechamento,
+            itens_previstos, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         i.uuid,
         estabelecimentoId,
         i.trilha,
@@ -313,6 +315,10 @@ export function restaurar(
         i.status,
         i.dia_local,
         i.total_itens,
+        // `?? null`: backup anterior à v12 não traz estes campos.
+        i.hora_abertura ?? null,
+        i.hora_fechamento ?? null,
+        i.itens_previstos ?? null,
         i.atualizado_em,
       ).lastInsertRowId;
       idDaInspecao.set(String(i.uuid), id);

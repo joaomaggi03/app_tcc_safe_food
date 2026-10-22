@@ -66,6 +66,9 @@ test('instalação nova cria o schema inteiro', () => {
     colunas(db, 'estabelecimento').includes('hora_abertura'),
     'estabelecimento.hora_abertura (v11)',
   );
+  for (const coluna of ['hora_abertura', 'hora_fechamento', 'itens_previstos']) {
+    assert.ok(colunas(db, 'inspecao').includes(coluna), `inspecao.${coluna} (v12)`);
+  }
 });
 
 test('migrar é idempotente: rodar de novo não muda nada', () => {
@@ -424,6 +427,40 @@ test('a atualização da v10 cria os horários, e a linha antiga fica sem horár
   assert.equal(linha.nome, 'Cantina da Ana');
   assert.equal(linha.hora_abertura, null);
   assert.equal(linha.hora_fechamento, null);
+});
+
+/**
+ * v12: horário e itens previstos congelados na inspeção. As inspeções
+ * antigas ficam NULL — e as pendências delas simplesmente não são
+ * contadas, em vez de inventadas a partir do checklist de hoje.
+ */
+test('a atualização da v11 cria os campos congelados da inspeção, NULL nas antigas', () => {
+  const db = bancoVazio();
+
+  db.execSync('PRAGMA user_version = 0');
+  migrarAte(db, 11);
+  db.runSync(
+    `INSERT INTO perfil (id, nome, descricao, periodicidade_auditoria_dias, ordem)
+     VALUES ('restaurante','Restaurante','d',30,1)`,
+  );
+  db.runSync(
+    `INSERT INTO estabelecimento (nome, perfil_id, data_cadastro, periodicidade_auditoria_dias)
+     VALUES ('Cantina da Ana','restaurante','2026-08-01',30)`,
+  );
+  db.runSync(
+    `INSERT INTO inspecao (estabelecimento_id, trilha, data_inicio, status, dia_local, total_itens)
+     VALUES (1,'diario','2026-10-19T10:00:00.000Z','concluida','2026-10-19',32)`,
+  );
+
+  migrar(db);
+
+  const linha = db.getFirstSync(
+    'SELECT total_itens, hora_abertura, hora_fechamento, itens_previstos FROM inspecao',
+  );
+  assert.equal(linha.total_itens, 32, 'o que já existia fica');
+  assert.equal(linha.hora_abertura, null);
+  assert.equal(linha.hora_fechamento, null);
+  assert.equal(linha.itens_previstos, null);
 });
 
 // ---------------------------------------------------------------

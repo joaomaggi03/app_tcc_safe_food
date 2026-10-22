@@ -25,7 +25,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Suba este número sempre que adicionar/alterar tabelas em `migrar()`. */
-export const VERSAO_SCHEMA = 11;
+export const VERSAO_SCHEMA = 12;
 
 /**
  * Versão 1 do schema: catálogo da RDC 216 + o estabelecimento.
@@ -495,6 +495,27 @@ const SCHEMA_V11 = `
   ALTER TABLE estabelecimento ADD COLUMN hora_fechamento TEXT;
 `;
 
+/**
+ * v12: O QUE AS PENDÊNCIAS PRECISAM CONGELADO NA INSPEÇÃO (entrega 2 dos
+ * pedidos do orientador; regra em `db/pendencia.ts`).
+ *
+ * `hora_abertura` / `hora_fechamento` — o horário do estabelecimento
+ * NAQUELE DIA, copiado ao abrir a diária (e acompanhando edições do
+ * cadastro enquanto a diária de hoje está aberta). Sem isso, mudar o
+ * horário em outubro reescreveria as pendências de setembro.
+ *
+ * `itens_previstos` — os ids dos itens que a diária tinha, gravados na
+ * conclusão como JSON (mesma regra dos tópicos: o SQL não cruza, só a
+ * conta em TypeScript lê). É o que diz QUAIS ficaram sem resposta; o
+ * `total_itens` só dizia quantos. Inspeções anteriores ficam NULL, e
+ * suas pendências não são contadas.
+ */
+const SCHEMA_V12 = `
+  ALTER TABLE inspecao ADD COLUMN hora_abertura   TEXT;
+  ALTER TABLE inspecao ADD COLUMN hora_fechamento TEXT;
+  ALTER TABLE inspecao ADD COLUMN itens_previstos TEXT;
+`;
+
 /** Essa tabela já tem essa coluna? */
 function temColuna(db: SQLiteDatabase, tabela: string, coluna: string): boolean {
   return db
@@ -559,6 +580,10 @@ export function migrar(db: SQLiteDatabase): void {
 
   if (versaoAtual < 11) {
     db.execSync(SCHEMA_V11);
+  }
+
+  if (versaoAtual < 12) {
+    db.execSync(SCHEMA_V12);
   }
 
   // PRAGMA não aceita parâmetro (?), por isso a interpolação direta.

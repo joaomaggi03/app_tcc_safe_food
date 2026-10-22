@@ -82,6 +82,7 @@ import {
   type VerificacaoChecklist,
 } from '../db/consultas';
 import { diaLocalISO } from '../db/datas';
+import { contarPendencias, etapaEncerrada } from '../db/pendencia';
 import {
   janelaDoMomento,
   lerHorarios,
@@ -101,6 +102,7 @@ import {
   ROTULO_TRILHA_CURTO,
   textoHoraResposta,
   textoJanela,
+  textoPendencias,
 } from '../theme/rotulos';
 
 /**
@@ -525,6 +527,38 @@ export function ExecucaoInspecao({
   const faltam = itens.length - respondidos;
 
   /**
+   * AS PENDÊNCIAS DE AGORA (entrega 2): itens sem resposta de etapas que
+   * já encerraram. Mesma regra que conta as do mês (`db/pendencia.ts`) —
+   * aqui com a inspeção ainda aberta. Só na diária.
+   */
+  const entradaPendencias = {
+    concluida: false,
+    horarios,
+    dia: inspecao.dia_local ?? agora.dia,
+    hoje: agora.dia,
+    minuto: agora.minuto,
+  };
+  const pendencias =
+    trilha === 'diario'
+      ? contarPendencias({
+          ...entradaPendencias,
+          previstos: itens.map((item) => ({
+            id: item.id,
+            momento: momentoDoItem[item.id] ?? 'servico',
+          })),
+          respondidos: new Set(Object.keys(respostas)),
+        })
+      : null;
+
+  /** A etapa do bloco encerrou? Aí o que estiver sem resposta é pendência. */
+  function blocoEncerrado(bloco: Bloco): boolean {
+    const momento = momentoDoBloco(bloco);
+    return (
+      trilha === 'diario' && momento !== null && etapaEncerrada(momento, entradaPendencias)
+    );
+  }
+
+  /**
    * A notificação fixa de "inspeção em andamento", atualizada a cada
    * resposta e ao abrir (ou retomar) a inspeção.
    *
@@ -591,7 +625,10 @@ export function ExecucaoInspecao({
   function concluir() {
     // `itens.length` é o tamanho do checklist AGORA; ele é congelado na
     // inspeção para o histórico não mudar quando o checklist mudar.
-    concluirInspecao(inspecao.id, itens.length);
+    concluirInspecao(
+      inspecao.id,
+      itens.map((item) => item.id),
+    );
     void encerrarAndamento(trilha);
 
     // Concluir zera o relógio desta trilha, então o alerta de vencimento
@@ -609,11 +646,19 @@ export function ExecucaoInspecao({
 
   function aoConcluir() {
     if (faltam > 0) {
+      // Na diária, o que fica sem resposta vira PENDÊNCIA ao concluir — o
+      // usuário precisa saber disso antes, e não descobrir no resultado.
+      const consequencia =
+        trilha === 'diario'
+          ? faltam === 1
+            ? ' Ao concluir, ele fica registrado como pendência do dia.'
+            : ' Ao concluir, eles ficam registrados como pendências do dia.'
+          : '';
       Alert.alert(
         'Concluir assim mesmo?',
-        faltam === 1
+        (faltam === 1
           ? 'Ainda falta 1 item sem resposta.'
-          : `Ainda faltam ${faltam} itens sem resposta.`,
+          : `Ainda faltam ${faltam} itens sem resposta.`) + consequencia,
         [
           { text: 'Continuar preenchendo', style: 'cancel' },
           { text: 'Concluir', onPress: concluir },
@@ -673,6 +718,9 @@ export function ExecucaoInspecao({
               aberto={abertos.includes(section.grupo.chave)}
               respondidos={contarRespondidos(section.grupo, respostas)}
               aoAlternar={() => alternar(section.grupo.chave)}
+              pendentes={
+                momento && pendencias ? pendencias.porEtapa[momento] : 0
+              }
               janela={
                 horarios && momento
                   ? {
@@ -696,6 +744,7 @@ export function ExecucaoInspecao({
           }
 
           const travado = janelas[section.grupo.chave] !== 'aberta';
+          const encerrado = blocoEncerrado(section.grupo);
 
           if (linha.tipo === 'verificacao') {
             return (
@@ -707,6 +756,11 @@ export function ExecucaoInspecao({
                 aoDetalhar={(abrir) => alternarDetalhe(linha.verificacao.id, abrir)}
                 travado={travado}
                 hora={ultimaHora(linha.verificacao.itens, horas)}
+                pendentes={
+                  encerrado
+                    ? linha.verificacao.itens.filter((item) => !respostas[item.id]).length
+                    : 0
+                }
               />
             );
           }
@@ -722,6 +776,7 @@ export function ExecucaoInspecao({
               aoAlternarCorrigido={() => alternarCorrigido(linha.item.id)}
               travado={travado}
               hora={horas[linha.item.id] ?? null}
+              pendente={encerrado && !respostas[linha.item.id]}
             />
           );
         }}
@@ -992,11 +1047,14 @@ function CabecalhoGrupo({
   respondidos,
   aoAlternar,
   janela,
+  pendentes,
 }: {
   grupo: Bloco;
   aberto: boolean;
   respondidos: number;
   aoAlternar: () => void;
+  /** Itens desta etapa que ficaram sem resposta depois que ela encerrou. */
+  pendentes: number;
   /** A janela da etapa — null fora da diária ou sem horário cadastrado. */
   janela: { situacao: SituacaoJanela; texto: string } | null;
 }) {
@@ -1015,7 +1073,8 @@ function CabecalhoGrupo({
       accessibilityState={{ expanded: aberto }}
       accessibilityLabel={
         `${grupo.titulo}, ${respondidos} de ${grupo.total} respondidos` +
-        (janela ? `. ${janela.texto}` : '')
+        (janela ? `. ${janela.texto}` : '') +
+        (pendentes > 0 ? `. ${textoPendencias(pendentes)}` : '')
       }
     >
       <Text style={[estilos.etiquetaGrupo, fechada && estilos.etiquetaGrupoFechada]}>
@@ -1036,6 +1095,10 @@ function CabecalhoGrupo({
               {janela.texto}
             </Text>
           </View>
+        ) : null}
+        {/* Fora da janela, a pendência é o que se lê com tudo recolhido. */}
+        {pendentes > 0 ? (
+          <Text style={estilos.pendenteTexto}>{textoPendencias(pendentes)}</Text>
         ) : null}
       </View>
 
@@ -1073,6 +1136,7 @@ function CartaoVerificacao({
   aoDetalhar,
   travado,
   hora,
+  pendentes,
 }: {
   verificacao: VerificacaoChecklist;
   estado: EstadoVerificacao;
@@ -1083,6 +1147,8 @@ function CartaoVerificacao({
   travado: boolean;
   /** A hora da resposta mais recente entre os itens cobertos. */
   hora: string | null;
+  /** Itens cobertos que ficaram sem resposta com a etapa encerrada. */
+  pendentes: number;
 }) {
   // Igual aos itens: cada cartão lembra sozinho se está com o enunciado
   // completo aberto, para abrir um não redesenhar a lista inteira.
@@ -1223,6 +1289,12 @@ function CartaoVerificacao({
         </Text>
       ) : null}
 
+      {pendentes > 0 ? (
+        <Text style={estilos.pendenteNota}>
+          {textoPendencias(pendentes)}: a etapa encerrou sem resposta.
+        </Text>
+      ) : null}
+
       {hora ? <Text style={estilos.horaResposta}>Respondida {textoHoraResposta(hora)}</Text> : null}
     </View>
   );
@@ -1250,7 +1322,10 @@ function LinhaItem({
   aoAlternarCorrigido,
   travado,
   hora,
+  pendente,
 }: {
+  /** Sem resposta, com a etapa encerrada: pendência do dia. */
+  pendente: boolean;
   item: ItemChecklist;
   resposta: Resposta | undefined;
   /** Recuado = está aberto dentro de uma verificação da rotina. */
@@ -1399,6 +1474,10 @@ function LinhaItem({
             </Text>
           </View>
         </Pressable>
+      ) : null}
+
+      {pendente ? (
+        <Text style={estilos.pendenteNota}>Pendente: a etapa encerrou sem resposta.</Text>
       ) : null}
 
       {hora ? <Text style={estilos.horaResposta}>Respondido {textoHoraResposta(hora)}</Text> : null}
@@ -1679,6 +1758,10 @@ const estilos = StyleSheet.create({
   // legível — o que foi respondido na hora certa continua valendo.
   botaoTravado: { opacity: 0.45 },
   horaResposta: { fontSize: 11, color: Cores.textoSuave, marginTop: 8 },
+  // Pendência em magenta: é o que precisa de atenção, mas sem o fundo de
+  // alerta do inadequado — não é falha de conformidade, é falta de registro.
+  pendenteTexto: { fontSize: 12, fontWeight: '700', color: Cores.acentoTexto, marginTop: 3 },
+  pendenteNota: { fontSize: 12, fontWeight: '600', color: Cores.acentoTexto, marginTop: 10 },
 
   botaoConcluir: {
     flexDirection: 'row',

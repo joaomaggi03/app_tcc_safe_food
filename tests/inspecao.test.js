@@ -76,17 +76,25 @@ test('a auditoria periódica pode atravessar dias', () => {
   );
 });
 
+/** Os itens previstos que a conclusão congela (v12), já em JSON. */
+const PREVISTOS = JSON.stringify(['i1', 'i2']);
+
 test('concluir carimba data, dia local e o tamanho do checklist', () => {
   const db = banco();
   const id = abrir(db, 'diario', HOJE);
 
-  db.runSync(sqlQueContem("SET status = 'concluida'"), 'agora', HOJE, 12, id);
+  db.runSync(sqlQueContem("SET status = 'concluida'"), 'agora', HOJE, 12, PREVISTOS, id);
 
   const linha = db.getFirstSync('SELECT * FROM inspecao WHERE id = ?', id);
   assert.equal(linha.status, 'concluida');
   assert.equal(linha.data_conclusao, 'agora');
   assert.equal(linha.dia_local, HOJE);
   assert.equal(linha.total_itens, 12, 'o tamanho é congelado para o histórico não mudar depois');
+  assert.equal(
+    linha.itens_previstos,
+    PREVISTOS,
+    'e QUAIS itens (v12): é o que diz, depois, quais ficaram sem resposta',
+  );
 });
 
 /**
@@ -99,7 +107,7 @@ test('concluir depois da meia-noite não muda o dia da inspeção', () => {
   const db = banco();
   const id = abrir(db, 'diario', ONTEM);
 
-  db.runSync(sqlQueContem("SET status = 'concluida'"), 'agora', HOJE, 12, id);
+  db.runSync(sqlQueContem("SET status = 'concluida'"), 'agora', HOJE, 12, PREVISTOS, id);
 
   assert.equal(
     db.getFirstSync('SELECT dia_local FROM inspecao WHERE id = ?', id).dia_local,
@@ -113,8 +121,8 @@ test('concluir uma inspeção já concluída não a altera de novo', () => {
   const id = abrir(db, 'diario', HOJE);
   const concluir = sqlQueContem("SET status = 'concluida'");
 
-  db.runSync(concluir, 'primeira', HOJE, 10, id);
-  db.runSync(concluir, 'segunda', HOJE, 99, id);
+  db.runSync(concluir, 'primeira', HOJE, 10, PREVISTOS, id);
+  db.runSync(concluir, 'segunda', HOJE, 99, '[]', id);
 
   const linha = db.getFirstSync('SELECT * FROM inspecao WHERE id = ?', id);
   assert.equal(linha.data_conclusao, 'primeira', 'o WHERE só pega inspeção em andamento');
@@ -127,7 +135,7 @@ test('a última conclusão de cada trilha é o que zera o relógio (RF05)', () =
 
   for (const dia of ['2026-09-08', '2026-09-10', '2026-09-09']) {
     const id = abrir(db, 'diario', dia);
-    db.runSync(concluir, `${dia}T20:00:00.000Z`, dia, 12, id);
+    db.runSync(concluir, `${dia}T20:00:00.000Z`, dia, 12, PREVISTOS, id);
   }
   abrir(db, 'diario', HOJE); // em andamento não conta
 
@@ -137,4 +145,32 @@ test('a última conclusão de cada trilha é o que zera o relógio (RF05)', () =
   ).dia;
 
   assert.equal(ultima, '2026-09-10', 'vale a data mais recente, não a última inserida');
+});
+
+/**
+ * v12: o horário fica CONGELADO por dia na diária. Editar o cadastro só
+ * pode mexer na diária de HOJE ainda aberta — nunca na concluída nem na
+ * de ontem, senão as pendências do passado mudariam com a edição.
+ */
+test('editar o horário só alcança a diária de hoje em andamento', () => {
+  const db = banco();
+  const ontemAberta = abrir(db, 'diario', ONTEM);
+  const hojeConcluida = abrir(db, 'diario', HOJE);
+  db.runSync("UPDATE inspecao SET status = 'concluida' WHERE id = ?", hojeConcluida);
+  const hojeAberta = abrir(db, 'diario', HOJE);
+  const auditoria = abrir(db, 'periodico', HOJE);
+
+  db.runSync(
+    sqlQueContem('UPDATE inspecao SET hora_abertura = ?, hora_fechamento = ?'),
+    '07:00',
+    '22:00',
+    1,
+    HOJE,
+  );
+
+  const hora = (id) => db.getFirstSync('SELECT hora_abertura FROM inspecao WHERE id = ?', id);
+  assert.equal(hora(hojeAberta).hora_abertura, '07:00', 'a de hoje acompanha a edição');
+  assert.equal(hora(hojeConcluida).hora_abertura, null, 'concluída fica como estava');
+  assert.equal(hora(ontemAberta).hora_abertura, null, 'a de ontem fica como estava');
+  assert.equal(hora(auditoria).hora_abertura, null, 'auditoria não tem janela');
 });

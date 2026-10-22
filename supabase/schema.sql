@@ -63,8 +63,17 @@ create table if not exists public.inspecao (
   status                text not null,
   dia_local             text,
   total_itens           integer,
+  hora_abertura         text,
+  hora_fechamento       text,
+  itens_previstos       text,
   atualizado_em         text not null
 );
+
+-- v12 do app: o que as pendências da diária precisam congelado na
+-- inspeção (mesma razão das colunas do estabelecimento, acima).
+alter table public.inspecao add column if not exists hora_abertura   text;
+alter table public.inspecao add column if not exists hora_fechamento text;
+alter table public.inspecao add column if not exists itens_previstos text;
 
 create table if not exists public.resposta (
   usuario_id         uuid not null default auth.uid()
