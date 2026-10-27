@@ -158,6 +158,126 @@ export function situacaoAcao(
   return { situacao: 'no_prazo', diasParaPrazo: dias };
 }
 
+// ---------------------------------------------------------------
+// ALERTA DE PRAZO DAS AÇÕES
+// ---------------------------------------------------------------
+
+/**
+ * A que horas o alerta de prazo toca. De manhã, como os lembretes da
+ * auditoria e da água (`HORA_LEMBRETE`): é tarefa de planejamento, e
+ * avisar às 9h deixa o dia inteiro para resolver. DECISÃO DO APP.
+ */
+export const HORA_ALERTA_ACAO = 9;
+
+/**
+ * Quantos dias de alerta ficam agendados, no máximo — os mais próximos.
+ * O iOS guarda só 64 notificações agendadas por app; com as 3 das
+ * trilhas e as até 21 das etapas, sobram folgadas.
+ */
+export const MAX_DIAS_ALERTA_ACAO = 10;
+
+/** O mínimo que o alerta precisa saber de uma ação ABERTA. */
+export interface PrazoDeAcao {
+  /** Dia local, 'AAAA-MM-DD'. */
+  prazo: string;
+  critico: boolean;
+}
+
+/** Um alerta por DIA, juntando as ações daquele dia. */
+export interface AlertaAcao {
+  /** Dia local em que toca, às `HORA_ALERTA_ACAO`. */
+  dia: string;
+  /** Ações cujo prazo é este dia. */
+  vencem: number;
+  /** Ações cujo prazo já passou neste dia. */
+  atrasadas: number;
+  /** Quantas, das duas contas acima, são de item crítico. */
+  criticas: number;
+}
+
+export interface EntradaAlertasAcao {
+  acoes: PrazoDeAcao[];
+  hoje: string;
+  /** Minuto de agora: o horário de hoje que já passou não serve mais. */
+  minutoAgora: number;
+  diasFuncionamento: string | null;
+}
+
+/**
+ * Os alertas de prazo das ações abertas, em ordem de dia.
+ *
+ * AS REGRAS:
+ *  - Toca NO DIA DO PRAZO, às 9h. Não há aviso antecipado: o prazo já é
+ *    curto (hoje ou 7 dias) e a ação está à vista no plano.
+ *  - Prazo em dia FECHADO vai para o próximo dia aberto — mesma regra
+ *    do vencimento das trilhas. Nesse dia a ação já aparece atrasada,
+ *    e o texto diz isso.
+ *  - Ação ATRASADA (ou cujo horário de hoje já passou) toca na próxima
+ *    ocorrência das 9h em dia aberto: o mesmo tratamento do lembrete da
+ *    trilha atrasada. Como o agendamento é refeito ao abrir o app, quem
+ *    continua atrasado é lembrado de novo — sem repetir no mesmo dia.
+ *  - UM alerta por dia, com a contagem, e não um por ação: cinco itens
+ *    inadequados numa auditoria seriam cinco notificações na mesma hora.
+ *  - No máximo `MAX_DIAS_ALERTA_ACAO` dias, os mais próximos.
+ */
+export function alertasDeAcao(entrada: EntradaAlertasAcao): AlertaAcao[] {
+  const { hoje, diasFuncionamento } = entrada;
+
+  // O primeiro dia em que ainda dá para tocar às 9h.
+  const primeiroPossivel = proximoDiaAberto(
+    entrada.minutoAgora < HORA_ALERTA_ACAO * 60 ? hoje : somarDias(hoje, 1),
+    diasFuncionamento,
+  );
+
+  const porDia = new Map<string, AlertaAcao>();
+  for (const acao of entrada.acoes) {
+    const noPrazo = proximoDiaAberto(acao.prazo, diasFuncionamento);
+    // 'AAAA-MM-DD' compara certo como texto.
+    const dia = noPrazo < primeiroPossivel ? primeiroPossivel : noPrazo;
+
+    const alerta = porDia.get(dia) ?? { dia, vencem: 0, atrasadas: 0, criticas: 0 };
+    if (acao.prazo < dia) alerta.atrasadas += 1;
+    else alerta.vencem += 1;
+    if (acao.critico) alerta.criticas += 1;
+    porDia.set(dia, alerta);
+  }
+
+  return [...porDia.values()]
+    .sort((a, b) => a.dia.localeCompare(b.dia))
+    .slice(0, MAX_DIAS_ALERTA_ACAO);
+}
+
+/** Título e corpo do alerta de prazo de um dia. */
+export function textoDoAlertaDeAcao(
+  alerta: AlertaAcao,
+  nome: string,
+): { titulo: string; corpo: string } {
+  const partes: string[] = [];
+  if (alerta.atrasadas > 0) {
+    partes.push(alerta.atrasadas === 1 ? '1 ação atrasada' : `${alerta.atrasadas} ações atrasadas`);
+  }
+  if (alerta.vencem > 0) {
+    partes.push(alerta.vencem === 1 ? '1 ação vence hoje' : `${alerta.vencem} ações vencem hoje`);
+  }
+  const criticas =
+    alerta.criticas === 0
+      ? ''
+      : alerta.criticas === 1
+        ? ' Uma delas é de item crítico.'
+        : ` ${alerta.criticas} são de item crítico.`;
+  const total = alerta.atrasadas + alerta.vencem;
+
+  return {
+    titulo:
+      alerta.atrasadas > 0
+        ? 'Plano de ação com atraso'
+        : total === 1
+          ? 'Ação corretiva vence hoje'
+          : 'Ações corretivas vencem hoje',
+    corpo: `${partes.join(' e ')} no plano do ${nome}.${criticas} Toque para abrir o plano.`,
+  };
+}
+
 /** O mínimo que a ordenação precisa saber de uma ação. */
 export interface AcaoOrdenavel {
   status: StatusAcao;

@@ -37,10 +37,12 @@
 
 import type * as TipoNotificacoes from 'expo-notifications';
 import { Platform } from 'react-native';
+import { alertasDeAcao, HORA_ALERTA_ACAO, textoDoAlertaDeAcao } from './acao';
 import { alertasDeEtapa } from './alertaEtapa';
 import {
   etapasFeitasHoje,
   obterResumoInspecao,
+  prazosDasAcoesAbertas,
   type Estabelecimento,
   type ModoInspecao,
   type MomentoDia,
@@ -65,6 +67,9 @@ import {
 
 /** Identifica os alertas deste app na lista do sistema. */
 const CANAL_ANDROID = 'vencimentos';
+
+/** Os alertas de prazo das ações; o toque neles leva ao plano. */
+const PREFIXO_ACAO = 'acao-';
 
 // `undefined` = ainda não tentamos carregar; `null` = tentamos e não dá.
 let modulo: typeof TipoNotificacoes | null | undefined;
@@ -246,8 +251,8 @@ function quandoAlertar(status: StatusTrilha, diasFuncionamento: string | null): 
 }
 
 /**
- * Cancela e reagenda os alertas das três trilhas e os das etapas da
- * diária (entrega 3).
+ * Cancela e reagenda os alertas das três trilhas, os das etapas da
+ * diária (entrega 3) e os de prazo das ações do plano (RF07).
  *
  * Silencioso por natureza: se o ambiente não suporta ou a permissão foi
  * negada, simplesmente não agenda nada e devolve 0. Nenhuma tela precisa
@@ -334,8 +339,35 @@ async function agendarTudo(estabelecimento: Estabelecimento): Promise<number> {
     agendados += 1;
   }
 
+  // OS PRAZOS DO PLANO DE AÇÃO (RF07): um alerta por dia com ação
+  // vencendo ou atrasada. A regra mora no acao.ts.
+  const alertasAcao = alertasDeAcao({
+    acoes: prazosDasAcoesAbertas(estabelecimento.id),
+    hoje: diaLocalISO(agora),
+    minutoAgora: minutoDoDia(agora),
+    diasFuncionamento: estabelecimento.dias_funcionamento,
+  });
+
+  for (const alerta of alertasAcao) {
+    const [ano, mes, dia] = alerta.dia.split('-').map(Number);
+    const { titulo, corpo } = textoDoAlertaDeAcao(alerta, estabelecimento.nome);
+
+    await Notifications.scheduleNotificationAsync({
+      // O prefixo é o que faz o toque abrir o plano (`aoTocarNotificacao`).
+      identifier: PREFIXO_ACAO + alerta.dia,
+      content: { title: titulo, body: corpo, data: { rota: '/plano-acao' } },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(ano, mes - 1, dia, HORA_ALERTA_ACAO, 0, 0),
+        channelId: CANAL_ANDROID,
+      },
+    });
+    agendados += 1;
+  }
+
   return agendados;
 }
+
 
 /**
  * O texto do alerta de cada etapa. Diz ATÉ QUANDO a etapa aceita
@@ -605,7 +637,8 @@ export function limparAndamentoOrfao(): Promise<void> {
 
 /**
  * Chama `abrir(rota)` quando o usuário toca numa notificação de
- * andamento — com o app aberto, em segundo plano ou fechado.
+ * andamento ou de prazo de ação (esta leva ao plano) — com o app
+ * aberto, em segundo plano ou fechado.
  *
  * Com o app FECHADO, o toque acontece antes de este código existir; o
  * sistema guarda a resposta e ela é lida aqui, uma vez, e apagada — sem
@@ -613,13 +646,14 @@ export function limparAndamentoOrfao(): Promise<void> {
  *
  * Devolve a função que desliga o ouvinte (para o `useEffect` limpar).
  */
-export function aoTocarAndamento(abrir: (rota: string) => void): () => void {
+export function aoTocarNotificacao(abrir: (rota: string) => void): () => void {
   const Notifications = carregar();
   if (!Notifications) return () => {};
 
   function tratar(resposta: TipoNotificacoes.NotificationResponse | null) {
     if (!resposta) return;
-    if (!ehAndamento(resposta.notification.request.identifier)) return;
+    const identificador = resposta.notification.request.identifier;
+    if (!ehAndamento(identificador) && !identificador.startsWith(PREFIXO_ACAO)) return;
     const rota = resposta.notification.request.content.data?.rota;
     if (typeof rota === 'string') abrir(rota);
   }

@@ -280,3 +280,25 @@ test('responder inadequado de novo mantém a marca', () => {
   db.runSync(SQL_UPSERT, id, 'comum1', 'inadequado', 'y');
   assert.equal(corrigido(db, id, 'comum1'), 1);
 });
+
+// ---------------------------------------------------------------
+// PRAZOS PARA O ALERTA
+// ---------------------------------------------------------------
+
+test('o alerta de prazo lê só as abertas, com a criticidade do item', () => {
+  const db = cenario();
+  const SQL_PRAZOS = constante('SELECT_PRAZOS_ABERTOS');
+  // O `acao()` daqui grava sempre o prazo 2026-09-30; o dia passado é o
+  // da CRIAÇÃO.
+  acao(db, 'critico', '2026-09-10');
+  acao(db, 'comum1', '2026-09-10');
+  acao(db, 'comum2', '2026-09-10', 'concluida');
+
+  const linhas = db
+    .getAllSync(`${SQL_PRAZOS} ORDER BY i.critico DESC`, 1)
+    .map((l) => [l.prazo, l.critico]);
+  assert.deepEqual(linhas, [
+    ['2026-09-30', 1],
+    ['2026-09-30', 0],
+  ]);
+});

@@ -29,7 +29,7 @@ import { router, Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
-import { aoTocarAndamento, limparAndamentoOrfao, reagendarAlertas } from '../db/notificacoes';
+import { aoTocarNotificacao, limparAndamentoOrfao, reagendarAlertas } from '../db/notificacoes';
 import { fazerBackup } from '../db/sincronizacao';
 import { supabase } from '../db/supabase';
 import { useConta } from '../store/conta';
@@ -98,7 +98,7 @@ export default function LayoutRaiz() {
 
     // `navigate`, e não `push`: se a tela já está aberta, fica nela em
     // vez de empilhar uma cópia.
-    const desligarToque = aoTocarAndamento((rota) => router.navigate(rota as never));
+    const desligarToque = aoTocarNotificacao((rota) => router.navigate(rota as never));
 
     return () => {
       assinaturaApp.remove();

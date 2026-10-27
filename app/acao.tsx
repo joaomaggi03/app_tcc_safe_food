@@ -50,6 +50,7 @@ import {
   type Estabelecimento,
   type ItemDaAcao,
 } from '../db/consultas';
+import { reagendarAlertas } from '../db/notificacoes';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import { formatarData, rotuloAtalhoPrazo } from '../theme/rotulos';
@@ -148,6 +149,9 @@ function Formulario({
       descricao,
       prazo,
     });
+    // O prazo pode ter mudado: o alerta dele também (sem `await`, como
+    // ao concluir a inspeção — a tela não espera o sistema).
+    void reagendarAlertas(estabelecimento);
     voltar();
   }
 
@@ -163,6 +167,7 @@ function Formulario({
           style: 'destructive',
           onPress: () => {
             excluirAcao(existente.id);
+            void reagendarAlertas(estabelecimento);
             voltar();
           },
         },

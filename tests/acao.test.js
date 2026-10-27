@@ -165,3 +165,92 @@ test('na auditoria, todo inadequado vira ação — mesmo com a marca gravada', 
   assert.equal(precisaDeAcao({ trilha: 'periodico', corrigidoNaHora: true }), true);
   assert.equal(precisaDeAcao({ trilha: 'semestral', corrigidoNaHora: true }), true);
 });
+
+// ---------------------------------------------------------------
+// ALERTA DE PRAZO (os horários escritos à mão: 9h = minuto 540)
+// ---------------------------------------------------------------
+
+const { alertasDeAcao, textoDoAlertaDeAcao, MAX_DIAS_ALERTA_ACAO } = acao();
+
+const SEXTA = '2026-09-18';
+const SEM_DOMINGO = '0111111'; // posição 0 = domingo (Date.getDay)
+
+function alertas(acoes, extra) {
+  return alertasDeAcao({
+    acoes,
+    hoje: SEXTA,
+    minutoAgora: 8 * 60,
+    diasFuncionamento: '1111111',
+    ...extra,
+  });
+}
+
+test('alerta no dia do prazo, um só por dia, com a contagem', () => {
+  const lista = alertas([
+    { prazo: '2026-09-25', critico: false },
+    { prazo: '2026-09-25', critico: true },
+    { prazo: '2026-09-28', critico: false },
+  ]);
+  assert.deepEqual(lista, [
+    { dia: '2026-09-25', vencem: 2, atrasadas: 0, criticas: 1 },
+    { dia: '2026-09-28', vencem: 1, atrasadas: 0, criticas: 0 },
+  ]);
+});
+
+test('prazo hoje antes das 9h toca hoje; depois das 9h, amanhã como atrasada', () => {
+  const antes = alertas([{ prazo: SEXTA, critico: false }]);
+  assert.deepEqual(antes, [{ dia: SEXTA, vencem: 1, atrasadas: 0, criticas: 0 }]);
+
+  const depois = alertas([{ prazo: SEXTA, critico: false }], { minutoAgora: 9 * 60 });
+  assert.deepEqual(depois, [{ dia: '2026-09-19', vencem: 0, atrasadas: 1, criticas: 0 }]);
+});
+
+test('ação atrasada toca na próxima manhã, junto com a que vence nesse dia', () => {
+  const lista = alertas([
+    { prazo: '2026-09-10', critico: true },
+    { prazo: SEXTA, critico: false },
+  ]);
+  assert.deepEqual(lista, [{ dia: SEXTA, vencem: 1, atrasadas: 1, criticas: 1 }]);
+});
+
+test('prazo no domingo fechado toca na segunda, e já como atrasada', () => {
+  const lista = alertas([{ prazo: '2026-09-20', critico: false }], {
+    diasFuncionamento: SEM_DOMINGO,
+  });
+  assert.deepEqual(lista, [{ dia: '2026-09-21', vencem: 0, atrasadas: 1, criticas: 0 }]);
+});
+
+test('o atrasado não é lembrado em dia fechado', () => {
+  // Sábado, 10h: a próxima manhã seria o domingo, que é folga.
+  const lista = alertas([{ prazo: '2026-09-10', critico: false }], {
+    hoje: '2026-09-19',
+    minutoAgora: 10 * 60,
+    diasFuncionamento: SEM_DOMINGO,
+  });
+  assert.equal(lista[0].dia, '2026-09-21');
+});
+
+test('sem ação aberta, nenhum alerta; e no máximo os dias mais próximos', () => {
+  assert.deepEqual(alertas([]), []);
+
+  const muitas = Array.from({ length: 15 }, (_, i) => ({
+    prazo: `2026-10-${String(i + 1).padStart(2, '0')}`,
+    critico: false,
+  }));
+  const lista = alertas(muitas);
+  assert.equal(lista.length, MAX_DIAS_ALERTA_ACAO);
+  assert.equal(lista[0].dia, '2026-10-01');
+});
+
+test('o texto diz quantas, se há atraso e se há item crítico', () => {
+  const uma = textoDoAlertaDeAcao({ dia: SEXTA, vencem: 1, atrasadas: 0, criticas: 0 }, 'Bar X');
+  assert.equal(uma.titulo, 'Ação corretiva vence hoje');
+  assert.equal(uma.corpo, '1 ação vence hoje no plano do Bar X. Toque para abrir o plano.');
+
+  const mista = textoDoAlertaDeAcao({ dia: SEXTA, vencem: 2, atrasadas: 1, criticas: 1 }, 'Bar X');
+  assert.equal(mista.titulo, 'Plano de ação com atraso');
+  assert.equal(
+    mista.corpo,
+    '1 ação atrasada e 2 ações vencem hoje no plano do Bar X. Uma delas é de item crítico. Toque para abrir o plano.',
+  );
+});

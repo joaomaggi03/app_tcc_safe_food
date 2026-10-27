@@ -31,6 +31,7 @@ import {
   type Estabelecimento,
   type SituacaoAcao,
 } from '../db/consultas';
+import { reagendarAlertas } from '../db/notificacoes';
 import { useEstabelecimento } from '../store/estabelecimento';
 import Cores from '../theme/cores';
 import { formatarData, formatarDataHora, textoPrazoAcao } from '../theme/rotulos';
@@ -75,6 +76,8 @@ function Plano({ estabelecimento }: { estabelecimento: Estabelecimento }) {
 
   function concluir(acao: AcaoCorretiva) {
     concluirAcao(acao.id);
+    // Ação concluída não tem mais prazo: o alerta dela sai.
+    void reagendarAlertas(estabelecimento);
     recarregar();
   }
 

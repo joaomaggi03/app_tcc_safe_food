@@ -375,8 +375,35 @@ exportação em PDF (RF08).
   - **As rotas escondidas das abas continuam montadas** depois que se sai
     delas: o formulário usa um contador de foco como `key` para nascer de
     novo a cada visita, senão traria o texto digitado no item anterior.
-  - Fora desta entrega: alerta de prazo de ação (`expo-notifications`) e
-    ação atrasada no prelúdio da aba Hoje.
+  - Fora desta entrega: ação atrasada no prelúdio da aba Hoje.
+  - **Alerta de prazo das ações (feito, 27/10/2026; sem migração).**
+    Fora dos RFs da proposta — ampliação pequena decidida pelo autor
+    (o P-RF07 pede gerar o plano; o P-RF05 fala do prazo da inspeção).
+    Regra pura `alertasDeAcao` / `textoDoAlertaDeAcao` em `db/acao.ts`,
+    testada em `tests/acao.test.js`; o SQL (`SELECT_PRAZOS_ABERTOS`) em
+    `tests/acao-consultas.test.js`. Decisões do app:
+    - toca **no dia do prazo, às 9h** (`HORA_ALERTA_ACAO`), sem aviso
+      antecipado — o prazo já é curto e a ação está à vista no plano;
+    - **um alerta por dia**, com a contagem ("2 ações vencem hoje"), e
+      não um por ação;
+    - prazo em dia fechado vai para o próximo dia aberto, e aí já conta
+      como atrasada; a atrasada toca na próxima manhã de dia aberto
+      (mesmo tratamento da trilha atrasada) e volta a ser lembrada a cada
+      reagendamento, nunca duas vezes no mesmo dia;
+    - no máximo 10 dias agendados (`MAX_DIAS_ALERTA_ACAO`), por causa do
+      limite de 64 do iOS.
+    - **Na demonstração:** a ação crítica nasce com prazo HOJE, e a
+      auditoria costuma ser concluída depois das 9h — então o primeiro
+      alerta dela é "Plano de ação com atraso", na manhã seguinte.
+      Coerente com `situacaoAcao` (testado), mas surpreende. O de ação
+      pode tocar às 9h junto com o da auditoria ou da água.
+    - Só o alerta de ação NAVEGA no toque (para o plano); os de trilha
+      e de etapa continuam só abrindo o app.
+    Entra no "cancela tudo e reagenda" de `db/notificacoes.ts`, que agora
+    também roda ao salvar, excluir e concluir uma ação. O toque abre
+    `/plano-acao` (identificador `acao-<dia>`, tratado no
+    `aoTocarNotificacao`). Ação criada ao concluir a inspeção já é coberta
+    pelo reagendamento que a conclusão fazia.
 - **Fase 6 mínima — RF01 (schema v10) — concluída.** Testada no aparelho
   contra o Supabase real em 27/09/2026.
   Login **opcional** +

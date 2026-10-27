@@ -13,6 +13,7 @@ import {
   descricaoDaAcao,
   ordenarAcoes,
   type PassoDoPlano,
+  type PrazoDeAcao,
   prazoDoAtalho,
   prazoPadraoEmDias,
   precisaDeAcao,
@@ -2048,6 +2049,23 @@ export function concluirAcao(acaoId: number): void {
 /** Apaga a ação — para a criada por engano, não para a resolvida (essa se conclui). */
 export function excluirAcao(acaoId: number): void {
   obterBanco().runSync('DELETE FROM acao WHERE id = ?', acaoId);
+}
+
+/**
+ * Prazo e criticidade das ações ABERTAS — o que o alerta de prazo
+ * precisa (`alertasDeAcao`, em `db/acao.ts`). Concluídas não têm mais
+ * prazo a correr.
+ */
+const SELECT_PRAZOS_ABERTOS = `
+  SELECT a.prazo, i.critico
+    FROM acao a
+    JOIN item i ON i.id = a.item_id
+   WHERE a.estabelecimento_id = ? AND a.status = 'aberta'`;
+
+export function prazosDasAcoesAbertas(estabelecimentoId: number): PrazoDeAcao[] {
+  return obterBanco()
+    .getAllSync<{ prazo: string; critico: number }>(SELECT_PRAZOS_ABERTOS, estabelecimentoId)
+    .map((linha) => ({ prazo: linha.prazo, critico: linha.critico === 1 }));
 }
 
 export interface ResumoAcoes {
