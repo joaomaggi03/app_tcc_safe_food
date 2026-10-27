@@ -725,8 +725,20 @@ exportação em PDF (RF08).
     a `VERSAO_SEED`** (senão os aparelhos não recebem o catálogo).
   - Pendente do autor: o "cor" do `prep_11` (a norma parece falar em
     aroma e sabor; ver o rascunho).
-- **RF08 — relatório da inspeção em PDF (feito; testado no build novo
-  em 21/10/2026).** Botão "Exportar relatório em PDF" na tela de resultado,
+- **RF08 — relatório da inspeção em PDF (feito; testado no aparelho em
+  27/10/2026, no APK `preview` do build EAS `337d4415`).** Em 21/10 ele
+  tinha sido registrado como "testado no build novo" por engano: a lista
+  do EAS (26/10) mostrou que nenhum build tinha o `expo-print`. O build
+  `preview` de 26/10 foi o primeiro com as libs, e o primeiro APK que roda
+  sem o Metro, com o backup ligado (variáveis do Supabase cadastradas no
+  ambiente `preview` do EAS; o perfil aponta para ele no `eas.json`).
+  - **Cabeçalho repetido nas páginas cortadas** (pedido do autor,
+    27/10): o título "Item a item", a identificação (estabelecimento ·
+    trilha · dia) e os nomes das colunas moram no `<thead>` da tabela,
+    que a impressão repete no topo de cada página. Conferido num PDF de 3
+    páginas gerado pelo Chromium/Edge no PC. **Mudança de JS: só chega a
+    um APK `preview` num build novo** (o APK traz o JS embutido).
+  Botão "Exportar relatório em PDF" na tela de resultado,
   para as três trilhas. O PDF é gerado NO APARELHO, sem internet, e sai
   pela janela de compartilhar do sistema (WhatsApp, e-mail, Drive,
   Arquivos).
@@ -738,6 +750,12 @@ exportação em PDF (RF08).
     (mesma armadilha do `expo-notifications`), e o botão responde "PDF
     indisponível nesta versão" em vez de derrubar o app. Um teste de
     convenção proíbe o import de topo das duas.
+    - **Só o `try` não bastava** (visto no aparelho em 26/10/2026, num
+      build antigo): o `require` lançava "Cannot find native module
+      'ExpoPrint'", o `try` pegava, mas no modo de desenvolvimento a tela
+      vermelha do React Native aparecia mesmo assim. Agora o
+      `requireOptionalNativeModule` (exportado pelo pacote `expo`)
+      pergunta antes se o módulo nativo existe, e devolve null sem lançar.
   - Três camadas, a regra fora da tela:
     - `db/relatorio.ts` — junta os dados (só lê): reaproveita score,
       score por categoria e `pendenciasDaDiaria`, e tem as duas consultas

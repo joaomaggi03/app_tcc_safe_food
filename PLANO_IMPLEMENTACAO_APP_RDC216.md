@@ -377,7 +377,7 @@ Deixe estes por último. Se implementados, viram diferencial; se não, ficam doc
 | 4 — Score | RF04 | Set | ✅ concluída |
 | 5 — Periodicidade | RF05 | Out | ✅ concluída |
 | 6 — Auth + Supabase | RF01 | Jul (feito em set) | ✅ mínima (login opcional + backup de mão única + restauração), testada no aparelho |
-| Fora do núcleo | RF07, RF08 | Out | RF07 ✅ · RF08 ✅ feito e testado no build novo em 21/out (PDF no aparelho com expo-print + expo-sharing) |
+| Fora do núcleo | RF07, RF08 | Out | RF07 ✅ · RF08 ✅ feito em 21/out e testado no aparelho em 27/out, no APK preview do EAS (PDF com expo-print + expo-sharing) |
 | Extra (fora dos RFs) | — | — | ✅ notificação fixa de inspeção em andamento, com progresso (pedido do autor; ver CLAUDE.md) |
 | Extra (pedido do orientador, 20/out) | — | Out | 🔶 janelas de horário da diária ✅ (schema v11) · pendências ✅ (schema v12) · alerta por etapa ✅ · plano de ação pronto para 1 item ✅ (`prag_01`, schema v13) — ver CLAUDE.md |
 

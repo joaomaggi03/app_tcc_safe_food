@@ -17,6 +17,7 @@
  * de quebrar.
  */
 
+import { requireOptionalNativeModule } from 'expo';
 import type * as TipoPrint from 'expo-print';
 import type * as TipoSharing from 'expo-sharing';
 import { dadosDoRelatorio } from './relatorio';
@@ -33,21 +34,37 @@ export type ResultadoExportacao = 'ok' | 'indisponivel' | 'sem_compartilhamento'
 let print: typeof TipoPrint | null | undefined;
 let sharing: typeof TipoSharing | null | undefined;
 
+/**
+ * Carrega as duas bibliotecas — mas só depois de PERGUNTAR se a parte
+ * nativa existe neste build.
+ *
+ * O `try` sozinho não bastava: num build antigo, o `require` lança "Cannot
+ * find native module 'ExpoPrint'", o `try` pega, mas no modo de
+ * desenvolvimento a tela vermelha de erros do React Native aparece mesmo
+ * assim (visto no aparelho em 26/10/2026). O `requireOptionalNativeModule`
+ * devolve null em vez de lançar, e aí nem se tenta o `require`.
+ */
 function carregar(): { print: typeof TipoPrint; sharing: typeof TipoSharing } | null {
   if (print === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      print = require('expo-print') as typeof TipoPrint;
-    } catch {
-      print = null;
+    print = null;
+    if (requireOptionalNativeModule('ExpoPrint')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        print = require('expo-print') as typeof TipoPrint;
+      } catch {
+        print = null;
+      }
     }
   }
   if (sharing === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      sharing = require('expo-sharing') as typeof TipoSharing;
-    } catch {
-      sharing = null;
+    sharing = null;
+    if (requireOptionalNativeModule('ExpoSharing')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        sharing = require('expo-sharing') as typeof TipoSharing;
+      } catch {
+        sharing = null;
+      }
     }
   }
   return print && sharing ? { print, sharing } : null;

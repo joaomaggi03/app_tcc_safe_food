@@ -272,7 +272,20 @@ function itens(d: DadosRelatorio): string {
         `<td class="num">${horaDaResposta(item.respondidaEm, d.inspecao.diaLocal)}</td></tr>`,
     );
   }
-  return `<h2>Item a item</h2><table class="itens"><tr><th>Item</th><th>Exigência (resumo)</th><th>Resposta</th><th>Hora</th></tr>${linhas.join('')}</table>`;
+  // O título e os nomes das colunas moram no <thead>: quando a tabela
+  // quebra de página, o motor de impressão REPETE o thead no topo da
+  // página seguinte (pedido do autor, 27/10/2026). Por isso o título da
+  // seção é a primeira linha do thead, e não um <h2> solto antes da
+  // tabela — senão a continuação começaria sem dizer de que relatório é.
+  const identificacao =
+    `${escapar(d.estabelecimento.nome)} · ${ROTULO_TRILHA[d.inspecao.trilha]}` +
+    (d.inspecao.diaLocal ? ` · ${formatarData(d.inspecao.diaLocal)}` : '');
+  return (
+    '<table class="itens"><thead>' +
+    `<tr class="titulo-tabela"><th colspan="4">Item a item <span class="identificacao">${identificacao}</span></th></tr>` +
+    '<tr><th>Item</th><th>Exigência (resumo)</th><th>Resposta</th><th>Hora</th></tr>' +
+    `</thead><tbody>${linhas.join('')}</tbody></table>`
+  );
 }
 
 /**
@@ -349,6 +362,11 @@ function estilos(): string {
             page-break-inside: avoid; }
     .acao-topo { color: ${Cores.textoSecundario}; margin-bottom: 4px; }
     tr { page-break-inside: avoid; }
+    thead { display: table-header-group; }
+    .titulo-tabela th { font-size: 13px; color: ${Cores.primariaTexto}; font-weight: bold;
+                        padding-top: 18px; border-bottom: 1px solid ${Cores.borda}; }
+    .identificacao { font-size: 9px; color: ${Cores.textoSuave}; font-weight: normal;
+                     margin-left: 6px; }
     .rodape { margin-top: 20px; color: ${Cores.textoSuave}; font-size: 9px; }
   `;
 }

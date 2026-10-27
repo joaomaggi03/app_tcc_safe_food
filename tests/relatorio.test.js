@@ -183,6 +183,22 @@ test('a lista item a item vai inteira, inclusive o que ficou sem resposta', () =
   assert.ok(html.includes('corrigido na hora'));
 });
 
+/**
+ * Pedido do autor (27/10/2026): a página cortada no meio da lista item a
+ * item começava sem dizer de que relatório era. O título e as colunas
+ * ficam no <thead>, que a impressão repete no topo de cada página
+ * (conferido num PDF de 3 páginas gerado pelo motor do Chromium).
+ */
+test('a lista item a item repete o cabeçalho nas páginas seguintes', () => {
+  const html = montarHtmlRelatorio(dados());
+  const thead = /<table class="itens"><thead>([\s\S]*?)<\/thead>/.exec(html);
+  assert.ok(thead, 'o cabeçalho tem que estar num <thead>, que é o que se repete');
+  assert.ok(thead[1].includes('Item a item'));
+  assert.ok(thead[1].includes('Cantina da Ana · Diária · 21/10/2026'));
+  assert.ok(thead[1].includes('<th>Resposta</th>'));
+  assert.ok(html.includes('thead { display: table-header-group; }'));
+});
+
 test('diária mostra as pendências por etapa', () => {
   const html = montarHtmlRelatorio(dados());
   assert.ok(html.includes('Pendências do dia: 1'));
