@@ -25,6 +25,17 @@ O diferencial do app é um **checklist dinâmico** que:
   PDF da proposta que está na mesma pasta. É a régua do agente `fiscal`.
 - **`data/rdc216.ts`** — a RDC 216 inteira estruturada em `PERFIS`, `CATEGORIAS`
   e `ITENS`, com tipos e funções auxiliares. É a fonte de dados do checklist.
+- **`docs/tcc-latex/`** — o TEXTO FINAL do TCC, em LaTeX. É aqui que o texto
+  é editado (principal: `utfpr-tcc.tex`; capítulos em
+  `estrutura/textuais/`). Os nomes dos arquivos não batem com o capítulo:
+  `revisao-de-literatura.tex` tem a Fundamentação E o Desenvolvimento,
+  `resultados-obtidos.tex` os Resultados, `metodologia.tex` o Cronograma e
+  `resultados.tex` a Conclusão. O `docs/TCC_Joao_Lucas_Maggi_revisado.pdf`
+  é só saída compilada e pode estar atrás do LaTeX (em 27/10/2026 estava:
+  faltava o trecho do plano de ação pronto). Números citados no texto
+  (itens, testes, datas de teste) devem ser conferidos no código.
+- **`docs/proposta/ALTERACOES_TEXTO_FINAL.md`** — o que precisava mudar no
+  texto por causa do que foi construído. Parte já entrou no LaTeX.
 
 Sempre que uma tarefa envolver checklist, perfis, categorias ou periodicidade,
 consulte esses dois arquivos em vez de inventar estrutura nova.
@@ -397,6 +408,8 @@ exportação em PDF (RF08).
       alerta dela é "Plano de ação com atraso", na manhã seguinte.
       Coerente com `situacaoAcao` (testado), mas surpreende. O de ação
       pode tocar às 9h junto com o da auditoria ou da água.
+    - **A confirmar no aparelho** (só testado no computador). Mudança
+      de JS: num APK `preview`, só chega com build novo.
     - Só o alerta de ação NAVEGA no toque (para o plano); os de trilha
       e de etapa continuam só abrindo o app.
     Entra no "cancela tudo e reagenda" de `db/notificacoes.ts`, que agora
@@ -840,8 +853,26 @@ exportação em PDF (RF08).
     conta e de internet — fica como trabalho futuro no texto do TCC.
   - Limitação: o arquivo sai com o nome que o `expo-print` sorteia;
     renomear exigiria o `expo-file-system`.
-- **Próxima: revisar o texto do TCC
-  contra o que foi construído** (ver seção 7 do plano).
+- **Próximas (levantadas em 28/10/2026; nenhum RF pendente no código):**
+  1. **Build novo do APK `preview` no EAS** — o de 26/10 não tem o
+     cabeçalho repetido do PDF nem o alerta de prazo das ações.
+  2. **Teste no aparelho** desse build: alerta de ação (toque com o app
+     fechado abre o plano), atraso dos alertas no Android 12+ (sem
+     `SCHEDULE_EXACT_ALARM`) e o PDF.
+  3. **Supabase:** reativar o projeto (pausado em 20/10), rodar o
+     `supabase/schema.sql` de novo (colunas da v11 e v12) e refazer o
+     roteiro de backup e restauração — validado em 27/09, antes delas.
+  4. **Conferir no DOU** as citações de `data/planos-acao.ts` e
+     `data/rotina-diaria.ts`.
+  5. **Decidir o nome do app:** `app.json` diz "Segurança Alimentar";
+     ícone e repositório, "SafeFood".
+  6. Antes da demonstração e das capturas do texto: "Apagar dados de
+     teste" no aparelho.
+  7. **Revisar o texto do TCC** (`docs/tcc-latex/`) contra o que foi
+     construído — ver seção 7 do plano e o último relatório do `fiscal`:
+     capturas, data do teste do RF08 (27/10, não 21/10), número de testes,
+     alerta de prazo das ações, metodologia real, declaração do uso de IA
+     e os `% CONFERIR`.
 - **Redesenho da navegação (feito).** As abas eram Início, Nova Inspeção e
   Histórico. Dois defeitos: o cartão de prazos do Início listava as três
   trilhas e cada linha levava a Nova Inspeção, que listava as três trilhas de
