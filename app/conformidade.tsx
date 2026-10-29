@@ -142,6 +142,8 @@ function Painel({ estabelecimento }: { estabelecimento: Estabelecimento }) {
           separação da sequência de dias. Só aparece com diárias contadas. */}
       {dados.pendencias.diarias > 0 ? (
         <PendenciasPorEtapa
+          // O padrão desta tela: espaço EMBAIXO de cada cartão, como os outros.
+          style={estilos.espacoDoCartao}
           pendencias={dados.pendencias.pendencias}
           titulo={`Pendências — ${dados.pendencias.janelaDias} dias`}
           nota={
@@ -497,6 +499,8 @@ const estilos = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
   },
+  // O mesmo espaço do `cartao` acima, para um cartão de fora (componente).
+  espacoDoCartao: { marginTop: 0, marginBottom: 16 },
   cabecalhoSecao: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   tituloCartao: { flex: 1, fontSize: 16, fontWeight: '700', color: Cores.texto },
   contagemSecao: { fontSize: 12, color: Cores.textoSuave },

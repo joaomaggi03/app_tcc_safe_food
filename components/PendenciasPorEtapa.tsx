@@ -15,7 +15,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { MomentoDia, Pendencias } from '../db/consultas';
 import Cores from '../theme/cores';
 import { ROTULO_ETAPA, textoPendencias } from '../theme/rotulos';
@@ -26,11 +26,18 @@ export default function PendenciasPorEtapa({
   pendencias,
   titulo,
   nota,
+  style,
 }: {
   pendencias: Pendencias;
   titulo: string;
   /** A frase de contexto embaixo das linhas. */
   nota: string;
+  /**
+   * O espaçamento de quem usa o cartão. As duas telas que o hospedam
+   * espaçam os cartões de jeitos diferentes (o resultado, em cima; a
+   * Conformidade, embaixo), e um margin fixo aqui descasava uma delas.
+   */
+  style?: StyleProp<ViewStyle>;
 }) {
   const nenhuma = pendencias.total === 0;
   // A barra de cada etapa é proporcional à MAIOR, e não ao total: o que
@@ -38,7 +45,7 @@ export default function PendenciasPorEtapa({
   const maior = Math.max(1, ...ETAPAS.map((etapa) => pendencias.porEtapa[etapa]));
 
   return (
-    <View style={estilos.cartao}>
+    <View style={[estilos.cartao, style]}>
       <View style={estilos.linhaTitulo}>
         <Ionicons
           name={nenhuma ? 'checkmark-done-outline' : 'time-outline'}
