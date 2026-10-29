@@ -408,8 +408,8 @@ exportação em PDF (RF08).
       alerta dela é "Plano de ação com atraso", na manhã seguinte.
       Coerente com `situacaoAcao` (testado), mas surpreende. O de ação
       pode tocar às 9h junto com o da auditoria ou da água.
-    - **A confirmar no aparelho** (só testado no computador). Mudança
-      de JS: num APK `preview`, só chega com build novo.
+    - **A confirmar no aparelho** (só testado no computador). Já está
+      no APK `preview` `df526a12`.
     - Só o alerta de ação NAVEGA no toque (para o plano); os de trilha
       e de etapa continuam só abrindo o app.
     Entra no "cancela tudo e reagenda" de `db/notificacoes.ts`, que agora
@@ -776,8 +776,8 @@ exportação em PDF (RF08).
     27/10): o título "Item a item", a identificação (estabelecimento ·
     trilha · dia) e os nomes das colunas moram no `<thead>` da tabela,
     que a impressão repete no topo de cada página. Conferido num PDF de 3
-    páginas gerado pelo Chromium/Edge no PC. **Mudança de JS: só chega a
-    um APK `preview` num build novo** (o APK traz o JS embutido).
+    páginas gerado pelo Chromium/Edge no PC. Está nos APKs `preview`
+    `52f2f536` (27/10) e `df526a12` (29/10); falta conferir no aparelho.
   Botão "Exportar relatório em PDF" na tela de resultado,
   para as três trilhas. O PDF é gerado NO APARELHO, sem internet, e sai
   pela janela de compartilhar do sistema (WhatsApp, e-mail, Drive,
@@ -854,8 +854,11 @@ exportação em PDF (RF08).
   - Limitação: o arquivo sai com o nome que o `expo-print` sorteia;
     renomear exigiria o `expo-file-system`.
 - **Próximas (levantadas em 28/10/2026; nenhum RF pendente no código):**
-  1. **Build novo do APK `preview` no EAS** — o de 26/10 não tem o
-     cabeçalho repetido do PDF nem o alerta de prazo das ações.
+  1. **Build `preview` feito:** `df526a12`, do commit `00b7b72`
+     (terminado em 29/10/2026) — já tem o cabeçalho repetido do PDF e o
+     alerta de prazo das ações. Falta nele só o espaçamento da aba
+     Conformidade (`b63b98a`, visual); o autor decidiu juntá-lo a outros
+     ajustes num build seguinte.
   2. **Teste no aparelho** desse build: alerta de ação (toque com o app
      fechado abre o plano), atraso dos alertas no Android 12+ (sem
      `SCHEDULE_EXACT_ALARM`) e o PDF.
