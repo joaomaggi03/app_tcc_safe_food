@@ -29,6 +29,7 @@ import {
   type SituacaoJanela,
 } from '../db/janela';
 import type { SituacaoTrilha, StatusTrilha } from '../db/periodicidade';
+import type { Reincidencia } from '../db/reincidencia';
 
 /** Nome de cada trilha de periodicidade. */
 export const ROTULO_TRILHA: Record<Trilha, string> = {
@@ -220,6 +221,31 @@ export const ROTULO_ETAPA: Record<MomentoDia, string> = {
   servico: 'Durante o serviço',
   fechamento: 'No fechamento',
 };
+
+/**
+ * O selo de reincidência (`db/reincidencia.ts`).
+ *
+ * Na diária, a contagem só aparece quando o item falhou mais de uma vez;
+ * uma falha só na última diária vira "na última diária", que é o que
+ * importa a quem está respondendo agora. "Última", e não "ontem": a
+ * diária anterior pode ter sido sábado, se domingo é folga.
+ */
+export function textoReincidencia(r: Reincidencia, trilha: Trilha): string {
+  if (trilha === 'periodico') return 'Inadequado na auditoria anterior';
+  if (trilha === 'semestral') return 'Inadequado na semestral anterior';
+  if (r.vezes >= 2) return `Inadequado em ${r.vezes} das últimas ${r.de} diárias`;
+  if (r.naUltima) return 'Inadequado na última diária';
+  return `Inadequado em 1 das últimas ${r.de} diárias`;
+}
+
+/**
+ * O selo numa VERIFICAÇÃO da rotina guiada, que cobre vários itens. O
+ * número é de UM item dela (o que mais falhou); sem o prefixo, "3 das
+ * últimas 7" seria lido como a verificação inteira reprovada três vezes.
+ */
+export function textoReincidenciaDoGrupo(r: Reincidencia, trilha: Trilha): string {
+  return `Um item desta verificação: ${textoReincidencia(r, trilha).replace(/^I/, 'i')}`;
+}
 
 /** "1 pendência" / "3 pendências" — itens não verificados a tempo. */
 export function textoPendencias(total: number): string {

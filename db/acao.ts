@@ -95,9 +95,16 @@ export function precisaDeAcao(item: {
  *
  * Os tópicos são o resumo curto que o checklist já mostra; o texto
  * integral da norma seria longo demais para uma linha de plano.
+ *
+ * Os tópicos são separados por "; ", como na coluna "Exigência" do PDF.
+ * Com espaço simples, viravam uma frase só com maiúscula no meio
+ * ("…laváveis Sem rachaduras…", "…alimento Ou combinação…").
  */
 export function descricaoGerada(item: { codigo_rdc: string; topicos: string[] }): string {
-  const exigencia = item.topicos.join(' ').trim();
+  const exigencia = item.topicos
+    .map((topico) => topico.trim())
+    .filter((topico) => topico.length > 0)
+    .join('; ');
   return exigencia.length > 0
     ? `Adequar ao item ${item.codigo_rdc} da RDC 216: ${exigencia}`
     : `Adequar ao item ${item.codigo_rdc} da RDC 216.`;

@@ -32,6 +32,7 @@ import {
   somarPendencias,
   type Pendencias,
 } from './pendencia';
+import { janelaDaTrilha, reincidencias, type Reincidencia } from './reincidencia';
 import { calcularSequencia, type Sequencia } from './sequencia';
 
 // Reexportado para as telas não precisarem importar de dois lugares.
@@ -39,6 +40,7 @@ export type { MomentoDia };
 export type { DiaDaSequencia, Sequencia, SituacaoSequencia } from './sequencia';
 export type { SituacaoAcao, StatusAcao } from './acao';
 export type { Pendencias, PorEtapa } from './pendencia';
+export type { Reincidencia } from './reincidencia';
 
 // ---------------------------------------------------------------
 // CATÁLOGO DA NORMA
@@ -1129,6 +1131,74 @@ function calcularPendencias(
 }
 
 /**
+ * As inspeções ANTERIORES da mesma trilha e do mesmo estabelecimento, da
+ * mais recente para a mais antiga, cada uma com os itens que saíram
+ * inadequados nela (uma linha por item; `item_id` NULL quando nenhum
+ * falhou — a inspeção conta mesmo assim, no "de 7").
+ *
+ * "Anterior" é pelo DIA da inspeção (`dia_local`); no mesmo dia, pela
+ * hora de início (`data_inicio`) e só então pelo id. O id sozinho não
+ * serve de desempate: a restauração do backup não preserva a ordem dos
+ * ids, e o `data_inicio` vai junto no backup (achado do `fiscal`).
+ *
+ * Não filtra por status: a diária largada aberta num dia passado também
+ * registrou o que viu. Mas exige ao menos UMA resposta: a diária aberta
+ * por engano e largada vazia não viu nada, e contaria como "a última",
+ * empurrando a de verdade para trás. As fabricadas pelas ferramentas de
+ * teste entram, como em tudo enquanto existem.
+ *
+ * Parâmetros: estabelecimento, trilha, id atual, dia atual (duas vezes),
+ * início atual (duas vezes), id atual de novo e a janela.
+ */
+const SELECT_INADEQUADOS_ANTERIORES = `
+  SELECT ant.id AS inspecao_id, r.item_id
+    FROM (SELECT id, dia_local, data_inicio
+            FROM inspecao
+           WHERE estabelecimento_id = ? AND trilha = ? AND id <> ?
+             AND dia_local IS NOT NULL
+             AND (dia_local < ?
+                  OR (dia_local = ? AND (data_inicio < ? OR (data_inicio = ? AND id < ?))))
+             AND EXISTS (SELECT 1 FROM resposta WHERE resposta.inspecao_id = inspecao.id)
+           ORDER BY dia_local DESC, data_inicio DESC, id DESC
+           LIMIT ?) ant
+    LEFT JOIN resposta r ON r.inspecao_id = ant.id AND r.resposta = 'inadequado'
+   ORDER BY ant.dia_local DESC, ant.data_inicio DESC, ant.id DESC`;
+
+/**
+ * A reincidência de cada item de uma inspeção (`db/reincidencia.ts`):
+ * quantas vezes ele saiu inadequado nas inspeções anteriores da mesma
+ * trilha. Vazio para inspeção sem dia (anterior ao schema v4).
+ */
+export function reincidenciaDaInspecao(inspecaoId: number): Record<string, Reincidencia> {
+  const db = obterBanco();
+  const inspecao = db.getFirstSync<Inspecao>('SELECT * FROM inspecao WHERE id = ?', inspecaoId);
+  if (!inspecao?.dia_local) return {};
+
+  const janela = janelaDaTrilha(inspecao.trilha);
+  const linhas = db.getAllSync<{ inspecao_id: number; item_id: string | null }>(
+    SELECT_INADEQUADOS_ANTERIORES,
+    inspecao.estabelecimento_id,
+    inspecao.trilha,
+    inspecao.id,
+    inspecao.dia_local,
+    inspecao.dia_local,
+    inspecao.data_inicio,
+    inspecao.data_inicio,
+    inspecao.id,
+    janela,
+  );
+
+  // As linhas já vêm na ordem certa; agrupa por inspeção mantendo-a.
+  const porInspecao = new Map<number, string[]>();
+  for (const linha of linhas) {
+    const itens = porInspecao.get(linha.inspecao_id) ?? [];
+    if (linha.item_id) itens.push(linha.item_id);
+    porInspecao.set(linha.inspecao_id, itens);
+  }
+  return reincidencias([...porInspecao.values()], janela);
+}
+
+/**
  * As pendências de uma diária — null fora da diária ou sem dados para
  * contar. (Não confundir com `pendenciasDaInspecao`, mais abaixo, que é
  * do plano de ação: lá "pendência" é item INADEQUADO a corrigir; aqui é
@@ -2127,9 +2197,10 @@ export function apagarDiariaDeHoje(estabelecimentoId: number): number {
 }
 
 /**
- * FERRAMENTA DE TESTE: grava diárias CONCLUÍDAS nos dias abertos
- * anteriores a hoje, para a sequência de dias e o histórico terem o que
- * mostrar numa demonstração.
+ * FERRAMENTA DE TESTE: grava diárias CONCLUÍDAS nos dias abertos dos
+ * últimos 30 dias (um mês), para a sequência de dias, o histórico, a
+ * rotina do mês e as pendências de 30 dias terem o que mostrar numa
+ * demonstração.
  *
  * A sequência mede dias SEGUIDOS, e isso não se fabrica pelo uso normal
  * numa noite só. Só aparece em modo de desenvolvimento, como o
@@ -2147,21 +2218,20 @@ export function apagarDiariaDeHoje(estabelecimentoId: number): number {
  *
  * Devolve quantas diárias foram criadas.
  */
-export function gerarDiariasDeTeste(estabelecimentoId: number, diasAbertos = 14): number {
+export function gerarDiariasDeTeste(estabelecimentoId: number, diasCorridos = 30): number {
   const db = obterBanco();
   const base = baseDasDiariasDeTeste(estabelecimentoId);
   if (!base) return 0;
 
   let criadas = 0;
-  let recuo = 1;
 
   db.withTransactionSync(() => {
-    // O limite de 60 dias só protege contra uma máscara estranha.
-    while (criadas < diasAbertos && recuo <= 60) {
+    // Dias CORRIDOS, e não dias abertos: "o último mês" é o mesmo para
+    // quem abre todo dia e para o feirante de dois dias por semana.
+    for (let recuo = 1; recuo <= diasCorridos; recuo += 1) {
       const dia = somarDias(diaLocalISO(), -recuo);
-      recuo += 1;
       if (!abreNoDia(base.diasFuncionamento, dia)) continue;
-      if (gravarDiariaDeTeste(estabelecimentoId, base.itens, dia, recuo)) criadas += 1;
+      if (gravarDiariaDeTeste(estabelecimentoId, base.itens, dia, recuo + 1)) criadas += 1;
     }
   });
 
@@ -2269,6 +2339,11 @@ function baseDasDiariasDeTeste(
  * em parte dos dias, um item SEM RESPOSTA, que vira pendência (v12). E
  * não chama `gerarAcoesDaInspecao`: o plano de ação não recebe itens
  * inventados.
+ *
+ * Um item FIXO (o terceiro da lista) sai inadequado, corrigido na hora,
+ * em dias alternados — para o selo de reincidência (`db/reincidencia.ts`)
+ * ter o que mostrar: na diária de hoje, ele aparece como "Inadequado em
+ * 3 (ou 4) das últimas 7 diárias", conforme os dias fechados.
  */
 function gravarDiariaDeTeste(
   estabelecimentoId: number,
@@ -2311,17 +2386,23 @@ function gravarDiariaDeTeste(
     const corrigido = variacao % 3 === 0 && indice === (variacao * 7) % itens.length;
     // Um dia em cada quatro fica com um item sem resposta: a pendência
     // que o cartão da Conformidade mostra na demonstração.
+    const reincidente = indice === 2 % itens.length && variacao % 2 === 0;
     const pendente =
-      variacao % 4 === 1 && indice === (variacao * 3) % itens.length && !naoObservado && !corrigido;
+      variacao % 4 === 1 &&
+      indice === (variacao * 3) % itens.length &&
+      !naoObservado &&
+      !corrigido &&
+      !reincidente;
     if (pendente) return;
+    const inadequado = corrigido || reincidente;
     db.runSync(
       `INSERT INTO resposta (inspecao_id, item_id, resposta, respondida_em, corrigido_na_hora)
        VALUES (?, ?, ?, ?, ?)`,
       inspecaoId,
       itemId,
-      corrigido ? 'inadequado' : naoObservado ? 'nao_observado' : 'adequado',
+      inadequado ? 'inadequado' : naoObservado ? 'nao_observado' : 'adequado',
       concluidaEm.toISOString(),
-      corrigido ? 1 : 0,
+      inadequado ? 1 : 0,
     );
   });
 

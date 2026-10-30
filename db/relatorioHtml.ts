@@ -39,12 +39,14 @@ import {
   ROTULO_SITUACAO_ACAO,
   ROTULO_TRILHA,
   textoHoraResposta,
+  textoReincidencia,
   textoScore,
 } from '../theme/rotulos';
 import { diaLocalISO } from './datas';
 import { faixaRdc275 } from './faixa';
 import { formatarHora, type Horarios } from './janela';
 import type { Pendencias } from './pendencia';
+import type { Reincidencia } from './reincidencia';
 
 export type RespostaRelatorio = 'adequado' | 'inadequado' | 'nao_se_aplica' | 'nao_observado';
 
@@ -73,6 +75,12 @@ export interface ItemRelatorio {
   corrigidoNaHora: boolean;
   /** A etapa do expediente — só nos itens diários. */
   etapa: MomentoDia | null;
+  /**
+   * Quantas vezes o item saiu inadequado nas inspeções ANTERIORES a esta
+   * (`db/reincidencia.ts`), ou null/ausente se nunca falhou. Olha só as
+   * anteriores, então o uso normal não muda o PDF de uma inspeção antiga.
+   */
+  reincidencia?: Reincidencia | null;
 }
 
 /**
@@ -268,7 +276,11 @@ function itens(d: DadosRelatorio): string {
     linhas.push(
       `<tr class="${item.resposta ?? 'sem'}"><td>${escapar(item.codigoRdc)}${item.critico ? ' <span class="critico">crítico</span>' : ''}${etapa}</td>` +
         `<td>${item.topicos.map(escapar).join('; ')}</td>` +
-        `<td>${resposta}</td>` +
+        `<td>${resposta}${
+          item.reincidencia
+            ? `<br><span class="reincidente">${textoReincidencia(item.reincidencia, d.inspecao.trilha)}</span>`
+            : ''
+        }</td>` +
         `<td class="num">${horaDaResposta(item.respondidaEm, d.inspecao.diaLocal)}</td></tr>`,
     );
   }
@@ -358,6 +370,7 @@ function estilos(): string {
     tr.sem td { color: ${Cores.textoSuave}; }
     .critico { color: ${Cores.acentoForte}; font-size: 9px; }
     .etapa { color: ${Cores.textoSecundario}; font-size: 9px; }
+    .reincidente { color: ${Cores.acentoTexto}; font-size: 9px; font-weight: bold; }
     .acao { border: 1px solid ${Cores.borda}; padding: 6px 8px; margin-bottom: 6px;
             page-break-inside: avoid; }
     .acao-topo { color: ${Cores.textoSecundario}; margin-bottom: 4px; }

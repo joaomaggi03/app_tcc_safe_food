@@ -131,9 +131,9 @@ test('a ação gerada diz o item e a exigência, com os tópicos', () => {
   assert.equal(
     descricaoGerada({
       codigo_rdc: '4.8.8',
-      topicos: ['Cozinhar a 70 °C no centro.', 'Conferir com termômetro.'],
+      topicos: ['70 °C em todas as partes do alimento', 'Ou combinação equivalente de tempo e temperatura'],
     }),
-    'Adequar ao item 4.8.8 da RDC 216: Cozinhar a 70 °C no centro. Conferir com termômetro.',
+    'Adequar ao item 4.8.8 da RDC 216: 70 °C em todas as partes do alimento; Ou combinação equivalente de tempo e temperatura',
   );
 });
 

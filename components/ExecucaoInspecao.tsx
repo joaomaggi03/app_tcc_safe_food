@@ -68,6 +68,7 @@ import {
   horasDasRespostas,
   iniciarInspecao,
   marcarCorrigidoNaHora,
+  reincidenciaDaInspecao,
   respostasDaInspecao,
   rotinaDoPerfil,
   salvarResposta,
@@ -76,6 +77,7 @@ import {
   type ItemChecklist,
   type ModoInspecao,
   type MomentoDia,
+  type Reincidencia,
   type Resposta,
   type SecaoCategoria,
   type Trilha,
@@ -83,6 +85,7 @@ import {
 } from '../db/consultas';
 import { diaLocalISO } from '../db/datas';
 import { contarPendencias, etapaEncerrada, etapasCompletas } from '../db/pendencia';
+import { reincidenciaDoGrupo } from '../db/reincidencia';
 import {
   janelaDoMomento,
   lerHorarios,
@@ -103,6 +106,8 @@ import {
   textoHoraResposta,
   textoJanela,
   textoPendencias,
+  textoReincidencia,
+  textoReincidenciaDoGrupo,
 } from '../theme/rotulos';
 
 /**
@@ -374,6 +379,13 @@ export function ExecucaoInspecao({
    */
   const podeCorrigirNaHora = aceitaCorrecaoNaHora(trilha);
   const [corrigidos, setCorrigidos] = useState(() => corrigidosNaHora(inspecao.id));
+
+  /**
+   * A REINCIDÊNCIA de cada item (`db/reincidencia.ts`): quantas vezes ele
+   * saiu inadequado nas inspeções ANTERIORES desta trilha. Lida uma vez
+   * só: responder esta inspeção não muda as anteriores.
+   */
+  const [reincidenciaPorItem] = useState(() => reincidenciaDaInspecao(inspecao.id));
 
   // A lista redesenha quando QUALQUER um destes muda. O `useMemo` é para
   // não criar um objeto novo a cada renderização — a rolagem também
@@ -779,6 +791,13 @@ export function ExecucaoInspecao({
                 aoResponder={(resposta) => responderVerificacao(linha.verificacao, resposta)}
                 aoDetalhar={(abrir) => alternarDetalhe(linha.verificacao.id, abrir)}
                 travado={travado}
+                reincidencia={textoDoSeloDoGrupo(
+                  reincidenciaDoGrupo(
+                    linha.verificacao.itens.map((item) => item.id),
+                    reincidenciaPorItem,
+                  ),
+                  trilha,
+                )}
                 hora={ultimaHora(linha.verificacao.itens, horas)}
                 pendentes={
                   encerrado
@@ -799,6 +818,7 @@ export function ExecucaoInspecao({
               corrigido={corrigidos.includes(linha.item.id)}
               aoAlternarCorrigido={() => alternarCorrigido(linha.item.id)}
               travado={travado}
+              reincidencia={textoDoSelo(reincidenciaPorItem[linha.item.id] ?? null, trilha)}
               hora={horas[linha.item.id] ?? null}
               pendente={encerrado && !respostas[linha.item.id]}
             />
@@ -929,6 +949,16 @@ function linhasDoBloco(bloco: Bloco, detalhadas: string[]): Linha[] {
 
 function contarRespondidos(bloco: Bloco, respostas: Record<string, Resposta>): number {
   return itensDoBloco(bloco).filter((item) => respostas[item.id]).length;
+}
+
+/** O texto do selo de reincidência, ou null se o item nunca falhou. */
+function textoDoSelo(reincidencia: Reincidencia | null, trilha: Trilha): string | null {
+  return reincidencia ? textoReincidencia(reincidencia, trilha) : null;
+}
+
+/** O mesmo, numa verificação da rotina: o número é de UM item dela. */
+function textoDoSeloDoGrupo(reincidencia: Reincidencia | null, trilha: Trilha): string | null {
+  return reincidencia ? textoReincidenciaDoGrupo(reincidencia, trilha) : null;
 }
 
 /**
@@ -1159,6 +1189,7 @@ function CartaoVerificacao({
   aoResponder,
   aoDetalhar,
   travado,
+  reincidencia,
   hora,
   pendentes,
 }: {
@@ -1169,6 +1200,8 @@ function CartaoVerificacao({
   aoDetalhar: (abrir?: boolean) => void;
   /** Fora da janela da etapa: dá para ver, não para responder. */
   travado: boolean;
+  /** O selo do item coberto que mais falhou antes, ou null. */
+  reincidencia: string | null;
   /** A hora da resposta mais recente entre os itens cobertos. */
   hora: string | null;
   /** Itens cobertos que ficaram sem resposta com a etapa encerrada. */
@@ -1189,6 +1222,8 @@ function CartaoVerificacao({
           </View>
         ) : null}
       </View>
+
+      <SeloReincidencia texto={reincidencia} />
 
       {/* O RESUMO é o que se lê no dia a dia; o enunciado técnico fica
           a um toque, para quem precisar do detalhe. */}
@@ -1336,6 +1371,21 @@ function CabecalhoSecao({ linha }: { linha: Extract<Linha, { tipo: 'secao' }> })
   );
 }
 
+/**
+ * O selo de REINCIDÊNCIA: o item já saiu inadequado nas inspeções
+ * anteriores. Fica logo abaixo do código, antes da pergunta, para ser
+ * lido ANTES de responder — é quando ele muda a atenção de quem inspeciona.
+ */
+function SeloReincidencia({ texto }: { texto: string | null }) {
+  if (!texto) return null;
+  return (
+    <View style={estilos.reincidencia} accessibilityRole="text">
+      <Ionicons name="repeat" size={13} color={Cores.acentoForte} />
+      <Text style={estilos.reincidenciaTexto}>{texto}</Text>
+    </View>
+  );
+}
+
 function LinhaItem({
   item,
   resposta,
@@ -1345,6 +1395,7 @@ function LinhaItem({
   corrigido,
   aoAlternarCorrigido,
   travado,
+  reincidencia,
   hora,
   pendente,
 }: {
@@ -1361,6 +1412,8 @@ function LinhaItem({
   aoAlternarCorrigido: () => void;
   /** Fora da janela da etapa: a resposta fica à mostra, mas não muda. */
   travado: boolean;
+  /** O selo de reincidência ("Inadequado na última diária"), ou null. */
+  reincidencia: string | null;
   /** Quando a resposta foi dada (UTC ISO), ou null se ainda não foi. */
   hora: string | null;
 }) {
@@ -1402,6 +1455,8 @@ function LinhaItem({
           </Text>
         </View>
       </View>
+
+      <SeloReincidencia texto={reincidencia} />
 
       {/* O RESUMO em tópicos é o que se lê no dia a dia; o texto da
           norma fica a um toque, para quem precisar da redação exata. */}
@@ -1785,6 +1840,18 @@ const estilos = StyleSheet.create({
   // Pendência em magenta: é o que precisa de atenção, mas sem o fundo de
   // alerta do inadequado — não é falha de conformidade, é falta de registro.
   pendenteTexto: { fontSize: 12, fontWeight: '700', color: Cores.acentoTexto, marginTop: 3 },
+  reincidencia: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    backgroundColor: Cores.acentoSuave,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  reincidenciaTexto: { fontSize: 12, fontWeight: '700', color: Cores.acentoForte },
   pendenteNota: { fontSize: 12, fontWeight: '600', color: Cores.acentoTexto, marginTop: 10 },
 
   botaoConcluir: {

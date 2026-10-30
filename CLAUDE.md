@@ -265,8 +265,9 @@ exportação em PDF (RF08).
   pelo uso normal numa noite só. Funções em `db/consultas.ts`:
   - `apagarDiariaDeHoje` — "Refazer a diária de hoje": apaga a diária de
     hoje (e as ações que ela gerou) para poder repeti-la no mesmo dia.
-  - `gerarDiariasDeTeste` — "Gerar histórico": diárias concluídas nos 14
-    dias ABERTOS anteriores a hoje que ainda não têm diária.
+  - `gerarDiariasDeTeste` — "Gerar histórico": diárias concluídas nos
+    dias abertos dos últimos 30 dias CORRIDOS (um mês) que ainda não têm
+    diária. Eram 14 dias abertos até 29/10/2026.
   - `completarSemanaDeTeste` — "Completar a semana": diária de segunda
     até hoje, **inclusive dia fechado** — que pela regra da sequência
     conta, então a corrida ganha dias que o estabelecimento real não
@@ -284,8 +285,10 @@ exportação em PDF (RF08).
     inspeção, e não na `meta`, para sobreviver à ida e volta do backup.
     `modo` é TEXT sem restrição dos dois lados, então não houve migração.
   - **Enquanto existem, entram em tudo**: histórico, rotina do mês,
-    sequência, recorde e score (em parte dos dias há um inadequado
-    corrigido na hora, que derruba o score de propósito). E sobem no
+    sequência, recorde, reincidência e score (em dias alternados o
+    terceiro item sai inadequado corrigido na hora, e em parte dos
+    outros mais um item; o score da demonstração cai de forma visível,
+    de propósito). E sobem no
     backup se houver conta. O "Apagar dados de teste" passa pelos
     gatilhos da v10, então a exclusão também chega à nuvem.
   - Não geram ações (não chamam `gerarAcoesDaInspecao`): o plano de ação
@@ -853,6 +856,50 @@ exportação em PDF (RF08).
     conta e de internet — fica como trabalho futuro no texto do TCC.
   - Limitação: o arquivo sai com o nome que o `expo-print` sorteia;
     renomear exigiria o `expo-file-system`.
+- **Reincidência dos itens (feito, 29/10/2026; sem migração).** Fora dos
+  RFs da proposta — ampliação pedida pelo autor. Cada item que já saiu
+  inadequado nas inspeções ANTERIORES da mesma trilha ganha um selo na
+  execução ("Inadequado na última diária", "Inadequado em 3 das últimas 7
+  diárias", "Inadequado na auditoria anterior") e uma linha na coluna de
+  resposta da lista item a item do PDF.
+  - Regra pura em `db/reincidencia.ts` (`reincidencias`,
+    `reincidenciaDoGrupo`, `janelaDaTrilha`), texto em
+    `textoReincidencia` (`theme/rotulos.ts`); SQL
+    `SELECT_INADEQUADOS_ANTERIORES` / `reincidenciaDaInspecao` em
+    `db/consultas.ts`. Testado em `tests/reincidencia.test.js` (regra e
+    SQL real) e `tests/relatorio.test.js`.
+  - **Decisões do autor:** diária olha as últimas **7** diárias
+    (`JANELA_DIARIA`); periódica e semestral, só a anterior;
+    **"corrigido na hora" conta** como inadequado (a repetição é o sinal
+    de que a correção imediata não resolve). **Não entra no score.**
+  - **Derivada, nunca gravada.** "Anterior" é pelo `dia_local`; no
+    mesmo dia, pelo `data_inicio` e só então pelo id — o id sozinho não
+    serve, porque a restauração do backup não preserva a ordem dos ids
+    (achado do `fiscal`). Não filtra status (a diária largada aberta num
+    dia passado também registrou o que viu), mas exige ao menos uma
+    resposta: a diária aberta por engano e largada vazia não conta, nem
+    toma o lugar da "última". Entram as inspeções de teste, como em tudo.
+  - **O PDF de uma inspeção antiga não muda com o uso normal**, porque
+    só as anteriores contam. Muda se inspeções anteriores forem criadas
+    ou apagadas depois — o que só as ferramentas de teste fazem ("Gerar
+    histórico" grava diárias em dias passados; "Apagar dados de teste"
+    as tira). Mesmo raciocínio da "foto do dia" das ações no RF08.
+  - Na rotina guiada, a verificação mostra o selo do item coberto que
+    mais falhou (`reincidenciaDoGrupo`), com o prefixo "Um item desta
+    verificação:" (`textoReincidenciaDoGrupo`) — sem ele, "3 das
+    últimas 7" seria lido como a verificação inteira. O selo fica logo
+    abaixo do código, ANTES da pergunta: é lido antes de responder.
+  - A execução lê a reincidência UMA vez, ao abrir a tela: responder a
+    inspeção atual não muda as anteriores. Se o "Gerar histórico" ou o
+    "Apagar dados de teste" rodar com a diária de hoje aberta na aba
+    Hoje, o selo só se atualiza quando a tela for montada de novo.
+  - O gerador de teste (`gravarDiariaDeTeste`) faz o terceiro item da
+    lista falhar, corrigido na hora, em dias alternados, para o selo ter
+    o que mostrar na demonstração.
+- **Texto das ações geradas com "; " entre os tópicos (29/10/2026).**
+  `descricaoGerada` juntava os tópicos com espaço, e o plano e o PDF
+  mostravam "…laváveis Sem rachaduras". Vale só para ações criadas
+  depois: o texto da ação fica gravado.
 - **Próximas (levantadas em 28/10/2026; nenhum RF pendente no código):**
   1. **Build `preview` feito:** `df526a12`, do commit `00b7b72`
      (terminado em 29/10/2026) — já tem o cabeçalho repetido do PDF e o

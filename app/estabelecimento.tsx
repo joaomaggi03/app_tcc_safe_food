@@ -493,7 +493,7 @@ function BotaoGerarHistorico({ estabelecimento }: { estabelecimento: Estabelecim
       onPress={() =>
         Alert.alert(
           'Gerar histórico de teste?',
-          'Grava diárias concluídas nos últimos 14 dias de funcionamento que ainda não têm diária. Hoje não é alterado. São dados de teste: sobem no backup se houver conta, e saem com "Apagar dados de teste".',
+          'Grava diárias concluídas nos dias de funcionamento dos últimos 30 dias que ainda não têm diária. Hoje não é alterado. São dados de teste: sobem no backup se houver conta, e saem com "Apagar dados de teste".',
           [
             { text: 'Cancelar', style: 'cancel' },
             {

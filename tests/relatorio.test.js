@@ -333,3 +333,25 @@ test('relatório: a ação de um inadequado vem, e a desta inspeção na frente'
     'a tela fica com a primeira por item',
   );
 });
+
+test('a reincidência do item aparece na lista item a item, com o texto da trilha', () => {
+  const base = dados();
+  const itens = base.itens.map((item) =>
+    item.codigoRdc === '4.8.8' ? { ...item, reincidencia: { vezes: 3, de: 7, naUltima: true } } : item,
+  );
+  const html = montarHtmlRelatorio({ ...base, itens });
+  assert.match(html, /class="reincidente">Inadequado em 3 das últimas 7 diárias</);
+  // Só no item que falhou antes: um selo só no relatório inteiro.
+  assert.equal(html.split('class="reincidente"').length - 1, 1);
+
+  const auditoria = montarHtmlRelatorio({
+    ...base,
+    inspecao: { ...base.inspecao, trilha: 'periodico' },
+    itens,
+  });
+  assert.match(auditoria, /Inadequado na auditoria anterior/);
+});
+
+test('sem reincidência, nenhum selo no relatório', () => {
+  assert.doesNotMatch(montarHtmlRelatorio(dados()), /class="reincidente"/);
+});

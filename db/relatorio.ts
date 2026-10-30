@@ -23,6 +23,7 @@ import {
   obterResumoInspecao,
   pendenciasDaDiaria,
   PESO_CRITICO,
+  reincidenciaDaInspecao,
   scorePorCategoria,
   type Inspecao,
 } from './consultas';
@@ -114,6 +115,11 @@ export function dadosDoRelatorio(inspecaoId: number): DadosRelatorio | null {
     corrigido_na_hora: number | null;
   }>(SELECT_ITENS_RELATORIO, inspecaoId, inspecao.itens_previstos);
 
+  // Reincidência: só as inspeções ANTERIORES a esta, então o uso normal
+  // não muda o PDF de uma inspeção antiga (as ferramentas de teste, que
+  // criam e apagam inspeções passadas, mudam).
+  const reincidencia = reincidenciaDaInspecao(inspecaoId);
+
   const itens: ItemRelatorio[] = linhasItens.map((linha) => ({
     codigoRdc: linha.codigo_rdc,
     categoria: linha.categoria,
@@ -125,6 +131,7 @@ export function dadosDoRelatorio(inspecaoId: number): DadosRelatorio | null {
     corrigidoNaHora: linha.corrigido_na_hora === 1,
     // A etapa só faz sentido na diária (nas outras trilhas não há janela).
     etapa: inspecao.trilha === 'diario' ? (linha.momento ?? 'servico') : null,
+    reincidencia: reincidencia[linha.item_id] ?? null,
   }));
 
   // A ação de cada item: a ordem do SQL põe a desta inspeção na frente,
