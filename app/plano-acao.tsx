@@ -157,7 +157,7 @@ function CartaoAcao({
   aoEditar: () => void;
 }) {
   const aberta = acao.status === 'aberta';
-  // O resumo do item em uma linha: o primeiro tópico, ou o texto da norma.
+  // O resumo do item em uma linha: o primeiro tópico, ou a descrição completa.
   // Só aparece se o texto da ação não o contém: o texto genérico gerado
   // pelo app já traz os tópicos, e repeti-los seria ruído. Quando o
   // usuário reescreve, ou o item tem plano pronto (passos no lugar dos

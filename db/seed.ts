@@ -26,7 +26,7 @@ import { PLANOS_PRONTOS } from '../data/planos-acao';
 import { CATEGORIAS, ITENS, PERFIS } from '../data/rdc216';
 
 /** Suba este número sempre que editar o conteúdo de data/rdc216.ts. */
-export const VERSAO_SEED = 5;
+export const VERSAO_SEED = 6;
 
 const CHAVE_META = 'versao_seed';
 

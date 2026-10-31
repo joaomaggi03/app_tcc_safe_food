@@ -212,7 +212,7 @@ function Formulario({
               accessibilityRole="button"
             >
               <Text style={estilos.verNormaTexto}>
-                {verNorma ? 'Esconder o texto da norma' : 'Ver texto da norma'}
+                {verNorma ? 'Esconder a descrição completa' : 'Ver descrição completa'}
               </Text>
               <Ionicons
                 name={verNorma ? 'chevron-up' : 'chevron-down'}

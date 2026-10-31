@@ -16,10 +16,11 @@
  * momento e pela mesma pessoa. O usuário responde 11 vezes em vez de 32.
  *
  * O QUE NÃO MUDA
- * A norma. Nenhum texto da RDC foi reescrito e nenhuma exigência foi
- * criada ou removida: cada verificação apenas APONTA para os itens que
- * cobre, pelo id, e o app grava a resposta item a item na tabela
- * `resposta`. O score (RF04) continua sendo calculado sobre os itens da
+ * A norma. Nenhuma exigência foi criada ou removida: cada verificação
+ * resume, em linguagem simples, os itens que cobre e APONTA para eles
+ * pelo id (o texto foi conferido contra o oficial em 31/10/2026 para não
+ * exigir mais do que a norma), e o app grava a resposta item a item na
+ * tabela `resposta`. O score (RF04) continua sendo calculado sobre os itens da
  * norma, e a tela mostra os códigos cobertos por cada pergunta — a
  * rastreabilidade até a RDC 216 fica visível para o usuário.
  *
@@ -49,8 +50,8 @@ export interface VerificacaoRotina {
    *
    * Mesma razão dos tópicos dos itens: o enunciado técnico completo tem
    * quatro a seis linhas no celular, e quem está com a cozinha rodando
-   * lê o suficiente para decidir. O texto integral continua no `texto`,
-   * a um toque.
+   * lê o suficiente para decidir. A descrição completa (redação do app,
+   * não a literal da RDC) continua no `texto`, a um toque.
    */
   topicos: string[];
   /** O enunciado completo, em linguagem técnica e operacional. */
@@ -84,13 +85,14 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     titulo: 'Matérias-primas e armazenamento',
     topicos: [
       'Ingredientes em boas condições',
-      'Tudo identificado com data e validade',
-      'Geladeira e freezer na temperatura certa',
+      'Preparados identificados com data e validade',
+      'Temperatura monitorada e registrada',
     ],
     texto:
-      'Matérias-primas e ingredientes em condições higiênico-sanitárias adequadas; produtos ' +
-      'armazenados identificados com designação, data de preparo e prazo de validade, sob ' +
-      'temperatura monitorada; alimentos preparados e refrigerados consumidos em até 5 dias.',
+      'Matérias-primas e ingredientes em condições higiênico-sanitárias adequadas; alimentos ' +
+      'preparados armazenados identificados com designação, data de preparo e prazo de ' +
+      'validade, com a temperatura monitorada e registrada; alimentos preparados e ' +
+      'refrigerados a 4 °C ou menos consumidos em até 5 dias.',
     itens: ['prep_01', 'prep_17', 'prep_18'],
   },
   {
@@ -117,12 +119,12 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     topicos: [
       'Alimento identificado e protegido',
       'Veículo limpo e coberto',
-      'Temperatura mantida no trajeto',
+      'Temperatura monitorada no trajeto',
     ],
     texto:
       'Alimentos destinados ao transporte identificados com produto, data de preparo e prazo ' +
       'de validade, e devidamente protegidos; meio de transporte higienizado, coberto e sem ' +
-      'cargas que comprometam o alimento; tempo e temperatura monitorados no trajeto.',
+      'cargas que comprometam o alimento; temperatura monitorada no trajeto.',
     itens: ['tran_01', 'tran_02', 'tran_03'],
   },
 
@@ -134,14 +136,15 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     momento: 'servico',
     titulo: 'Higienização das mãos e conduta',
     topicos: [
-      'Mãos lavadas ao chegar e ao trocar de tarefa',
+      'Mãos lavadas ao chegar, antes e depois de manipular',
       'Sempre após usar o sanitário',
       'Sem fumar, comer ou pegar dinheiro',
     ],
     texto:
-      'Lavagem e antissepsia das mãos ao iniciar a manipulação, a cada troca de atividade e ' +
-      'após o uso do sanitário; ausência de fumo, alimentação e manuseio de dinheiro durante ' +
-      'a manipulação de alimentos.',
+      'Lavagem das mãos ao chegar ao trabalho, antes e após manipular alimentos, após ' +
+      'qualquer interrupção do serviço, após tocar materiais contaminados e após o uso do ' +
+      'sanitário; ausência de fumo, alimentação e manuseio de dinheiro durante a manipulação ' +
+      'de alimentos.',
     itens: ['mani_04', 'mani_06'],
   },
   {
@@ -150,13 +153,13 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     titulo: 'Prevenção de contaminação cruzada',
     topicos: [
       'Cru, semipreparado e pronto separados',
-      'Mãos higienizadas ao passar de um para o outro',
+      'Mãos higienizadas do cru para o preparado',
       'Alimento consumido cru foi higienizado',
     ],
     texto:
-      'Separação entre alimentos crus, semipreparados e prontos, com utensílios e superfícies ' +
-      'distintos; higienização das mãos na transição entre eles; alimentos consumidos crus ' +
-      'submetidos a higienização com produto regularizado.',
+      'Sem contato direto ou indireto entre alimentos crus, semipreparados e prontos; ' +
+      'higienização das mãos de quem manipula alimentos crus antes de tocar nos preparados; ' +
+      'alimentos consumidos crus submetidos a higienização com produto regularizado.',
     itens: ['prep_03', 'prep_04', 'prep_19'],
   },
   {
@@ -164,15 +167,16 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     momento: 'servico',
     titulo: 'Tratamento térmico e fritura',
     topicos: [
-      '70 °C no centro do alimento',
-      'Conferir por cor, textura e temperatura',
+      '70 °C em todas as partes do alimento',
+      'Tempo e temperatura; cor e textura se aplicável',
       'Óleo até 180 °C, trocado ao alterar',
     ],
     texto:
       'Cocção atingindo no mínimo 70 °C em todas as partes do alimento, ou combinação de ' +
-      'tempo e temperatura equivalente, com verificação por temperatura, cor e textura; óleos ' +
-      'e gorduras aquecidos a no máximo 180 °C e substituídos ao apresentarem alteração de ' +
-      'cor, odor, espuma ou fumaça.',
+      'tempo e temperatura equivalente, com verificação da temperatura e do tempo e, quando ' +
+      'aplicável, da cor e da textura no centro; óleos ' +
+      'e gorduras aquecidos a no máximo 180 °C e substituídos ao apresentarem alteração ' +
+      'evidente de aroma ou sabor, ou formação intensa de espuma e fumaça.',
     itens: ['prep_08', 'prep_09', 'prep_10', 'prep_11'],
   },
   {
@@ -217,8 +221,8 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     ],
     texto:
       'Sobras de matérias-primas acondicionadas e identificadas com produto, data de ' +
-      'fracionamento e prazo de validade após a abertura; embalagens higienizadas antes de ' +
-      'serem abertas.',
+      'fracionamento e prazo de validade após a abertura; embalagens limpas antes de serem ' +
+      'abertas, quando aplicável.',
     itens: ['prep_06', 'prep_07'],
   },
   {
@@ -227,7 +231,7 @@ export const ROTINA_DIARIA: VerificacaoRotina[] = [
     titulo: 'Exposição ao consumo',
     topicos: [
       'Servir com utensílio ou luva descartável',
-      'Balcão quente e frio na temperatura certa',
+      'Balcão quente e frio com temperatura monitorada',
     ],
     texto:
       'Higienização das mãos e uso de utensílios ou luvas descartáveis ao porcionar e servir; ' +

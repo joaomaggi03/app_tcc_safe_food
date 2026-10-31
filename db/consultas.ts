@@ -1804,7 +1804,7 @@ export const JANELA_CONCLUIDAS_DIAS = 30;
 export interface ItemDaAcao {
   item_id: string;
   codigo_rdc: string;
-  /** O texto integral da norma, para o "ver texto da norma". */
+  /** A descrição completa do item (redação do app), para o "Ver descrição completa". */
   texto: string;
   topicos: string[];
   /** 0 ou 1. */

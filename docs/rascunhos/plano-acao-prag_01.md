@@ -153,8 +153,8 @@ mesmo com o óleo fora do plano pronto; se confirmado, corrijo o tópico.
 
 - [ ] Conferir os textos e os números dos subitens com o oficial
       (especialmente o das telas, no 4.1).
-- [ ] Passo 8 (complemento): manter com fonte, ou cortar.
+- [x] Passo 8 (complemento): cortado em 31/10/2026 — o "atualizar se o problema mostrou uma falha" não está no 4.11.6.
 - [ ] Passo 1: com exemplos, ou só o texto da norma.
 - [ ] Prazo: 7 dias ou mais curto.
 - [x] Perfis móveis: opção (b) — decidido em 21/10/2026.
-- [ ] O "cor" do `prep_11`.
+- [x] O "cor" do `prep_11`: corrigido em 31/10/2026 para "aroma e sabor", como no 4.8.11.

@@ -1470,7 +1470,7 @@ function LinhaItem({
           ))}
         </View>
       ) : (
-        // Sem resumo (item novo ou seed antigo), mostra o texto integral:
+        // Sem resumo (item novo ou seed antigo), mostra a descrição completa:
         // é melhor um parágrafo longo do que um item vazio.
         <Text style={estilos.textoItem}>{item.texto}</Text>
       )}
@@ -1489,7 +1489,7 @@ function LinhaItem({
               color={Cores.textoSecundario}
             />
             <Text style={estilos.verNormaTexto}>
-              {normaAberta ? 'Ocultar texto da norma' : `Ver texto da norma ${item.codigo_rdc}`}
+              {normaAberta ? 'Ocultar descrição completa' : `Ver descrição completa ${item.codigo_rdc}`}
             </Text>
           </Pressable>
 
@@ -1800,7 +1800,7 @@ const estilos = StyleSheet.create({
   topicoTexto: { flex: 1, fontSize: 14, lineHeight: 21, color: Cores.texto },
   verNorma: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   verNormaTexto: { fontSize: 12, fontWeight: '600', color: Cores.textoSecundario },
-  // O texto integral vem recuado e em cinza: é referência, não a
+  // A descrição completa vem recuada e em cinza: é referência, não a
   // instrução principal.
   textoNorma: {
     fontSize: 13,

@@ -400,6 +400,6 @@ ${pendencias(d)}
 ${inadequados(d)}
 ${itens(d)}
 ${ocultos(d)}
-<p class="rodape">Gerado em ${formatarDataHora(d.geradoEm)} pelo app Segurança Alimentar ${escapar(d.versaoApp)}. O score é o percentual do peso dos itens adequados sobre o dos avaliados; "não se aplica" e "não observado" não entram na conta. Os resumos dos itens são do app; o texto integral é o da RDC 216/2004.</p>
+<p class="rodape">Gerado em ${formatarDataHora(d.geradoEm)} pelo app SafeFood ${escapar(d.versaoApp)}. O score é o percentual do peso dos itens adequados sobre o dos avaliados; "não se aplica" e "não observado" não entram na conta. Os resumos e as descrições dos itens são do app; a redação oficial é a da RDC 216/2004.</p>
 </body></html>`;
 }

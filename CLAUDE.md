@@ -173,9 +173,10 @@ exportação em PDF (RF08).
     real em 5 segundos — para demonstrar sem esperar o vencimento.
 - **Resumo em tópicos (schema v5).** Cada item tem `topicos: string[]` no
   `data/rdc216.ts` — 1 a 3 frases curtas com o essencial, que é o que aparece
-  no checklist. O texto integral da norma fica atrás do botão "Ver texto da
-  norma". Os tópicos são reescrita nossa, não texto da RDC; por isso o
-  original continua acessível a um toque. Guardados como JSON num TEXT: a
+  no checklist. A descrição completa (`texto`) fica atrás do botão "Ver
+  descrição completa" — o botão dizia "Ver texto da norma", mas o `texto`
+  é a exigência em linguagem simples, NÃO a redação literal da RDC
+  (trocado em 31/10/2026, ver "Conferência com o texto oficial"). Guardados como JSON num TEXT: a
   regra aqui é *vira tabela o que o SQL precisa cruzar*, e tópicos só são
   exibidos, nunca filtrados.
 - **`expo-notifications` não pode ser importado no topo de um arquivo.** Ele
@@ -766,8 +767,7 @@ exportação em PDF (RF08).
     consertar": aqui o como foi revisado e tem origem.
   - **Ao acrescentar outro plano:** preencher `PLANOS_PRONTOS` e **subir
     a `VERSAO_SEED`** (senão os aparelhos não recebem o catálogo).
-  - Pendente do autor: o "cor" do `prep_11` (a norma parece falar em
-    aroma e sabor; ver o rascunho).
+  - O "cor" do `prep_11` foi resolvido na conferência de 31/10/2026.
 - **RF08 — relatório da inspeção em PDF (feito; testado no aparelho em
   27/10/2026, no APK `preview` do build EAS `337d4415`).** Em 21/10 ele
   tinha sido registrado como "testado no build novo" por engano: a lista
@@ -896,6 +896,44 @@ exportação em PDF (RF08).
   - O gerador de teste (`gravarDiariaDeTeste`) faz o terceiro item da
     lista falhar, corrigido na hora, em dias alternados, para o selo ter
     o que mostrar na demonstração.
+- **Conferência com o texto oficial da RDC 216 (31/10/2026).** Feita
+  sobre o texto do Ministério da Saúde (reprodução do DOU de 16/09/2004),
+  o mesmo link que o TCC cita. Os 89 itens citam artigos que existem e
+  tratam do assunto do item (os 32 diários comparados um a um; os 57
+  outros, por checagem automática de vocabulário); os 8 passos do plano
+  pronto citam os artigos certos. Corrigido o que dizia MAIS que a norma:
+  - `prep_11` (4.8.11): "cor, cheiro" → "aroma e sabor" (a norma diz
+    "características sensoriais, tais como aroma e sabor"), também na
+    verificação de tratamento térmico da rotina;
+  - `prep_18` (4.8.18): temperatura "monitorada E REGISTRADA";
+  - rotina, contaminação cruzada (4.8.3): saiu "utensílios e superfícies
+    distintos", que não está na norma;
+  - rotina, mãos (4.6.4): "a cada troca de atividade" → os momentos da
+    norma (ao chegar, antes e após manipular, após interrupção, após
+    tocar material contaminado, após o sanitário);
+  - plano pronto, passo 8 (4.11.6): saiu o "atualizar se o problema
+    mostrou uma falha", que era nosso com etiqueta da norma.
+  - Segunda rodada (achados do `fiscal`): tópicos do `mani_04` e do
+    `prep_03` (repetiam a "troca de tarefa" e os "utensílios separados");
+    `prep_09` e rotina com o "quando aplicável" da cor e textura (4.8.9)
+    e "70 °C em todas as partes" (4.8.8); rotina com "monitorada e
+    registrada" (4.8.18), só temperatura no transporte (4.9.2),
+    embalagens "limpas" e não "higienizadas" (4.8.7, higienização é
+    limpeza + desinfecção na própria RDC), "do cru para o preparado"
+    (4.8.4) e balcão "com temperatura monitorada" (4.10.3). Rodapé do
+    PDF: "app SafeFood" e "a redação oficial é a da RDC 216/2004".
+  - Ajustes finais (terceira passada do `fiscal`): `prep_07` com
+    "quando aplicável" (igual à rotina); `prep_11` com "físico-químicas
+    ou sensoriais" e "espuma e fumaça" intensas; `prep_03` com "Evitar
+    contato…", que é o "deve-se evitar" da norma, no lugar de "nunca se
+    encostam".
+  - Mantido por ser inferência direta: "nunca à temperatura ambiente"
+    no descongelamento (o 4.8.13 só admite refrigeração ou micro-ondas).
+  - Efeito da seed nova: o PDF de uma inspeção ANTIGA passa a mostrar
+    os tópicos novos, porque a lista item a item lê o catálogo atual.
+  - Botões "Ver texto da norma" → "Ver descrição completa" (execução e
+    formulário da ação). `VERSAO_SEED` = 6. Ações já criadas guardam o
+    texto antigo (é congelado). O `app.json` passou a "SafeFood".
 - **Texto das ações geradas com "; " entre os tópicos (29/10/2026).**
   `descricaoGerada` juntava os tópicos com espaço, e o plano e o PDF
   mostravam "…laváveis Sem rachaduras". Vale só para ações criadas
@@ -912,10 +950,10 @@ exportação em PDF (RF08).
   3. **Supabase:** reativar o projeto (pausado em 20/10), rodar o
      `supabase/schema.sql` de novo (colunas da v11 e v12) e refazer o
      roteiro de backup e restauração — validado em 27/09, antes delas.
-  4. **Conferir no DOU** as citações de `data/planos-acao.ts` e
-     `data/rotina-diaria.ts`.
-  5. **Decidir o nome do app:** `app.json` diz "Segurança Alimentar";
-     ícone e repositório, "SafeFood".
+  4. ~~Conferir no DOU as citações~~ — feito em 31/10/2026 (ver
+     "Conferência com o texto oficial").
+  5. ~~Decidir o nome do app~~ — SafeFood (31/10/2026), no texto e no
+     `app.json`; no celular, só a partir do próximo build.
   6. Antes da demonstração e das capturas do texto: "Apagar dados de
      teste" no aparelho.
   7. **Revisar o texto do TCC** (`docs/tcc-latex/`) contra o que foi

@@ -109,7 +109,7 @@ export const PLANOS_PRONTOS: PlanoPronto[] = [
       // Documentação.
       {
         texto:
-          'Conferir se o POP de controle de vetores e pragas existe e descreve as medidas preventivas e corretivas; atualizar se o problema mostrou uma falha nele.',
+          'Conferir se o POP de controle de vetores e pragas existe e contempla as medidas preventivas e corretivas contra a atração, o abrigo, o acesso e a proliferação de pragas.',
         itemRelacionado: 'docu_06',
         origem: { tipo: 'norma', codigoRdc: '4.11.6' },
       },
