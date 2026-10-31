@@ -1844,14 +1844,19 @@ const estilos = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    // Sem o teto, o texto longo da rotina ("Um item desta verificação:
+    // …") empurrava o selo para fora do cartão, em vez de quebrar a linha.
+    maxWidth: '100%',
     gap: 5,
     backgroundColor: Cores.acentoSuave,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginTop: 8,
+    marginBottom: 8,
   },
-  reincidenciaTexto: { fontSize: 12, fontWeight: '700', color: Cores.acentoForte },
+  // `flexShrink` deixa o texto encolher e quebrar dentro do selo.
+  reincidenciaTexto: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: Cores.acentoForte },
   pendenteNota: { fontSize: 12, fontWeight: '600', color: Cores.acentoTexto, marginTop: 10 },
 
   botaoConcluir: {
